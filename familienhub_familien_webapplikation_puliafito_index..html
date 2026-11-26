@@ -1,0 +1,3125 @@
+<!DOCTYPE html>
+<html lang="de-CH">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>FamilienHub – Unser Familien-Cockpit</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- MSAL Browser für optionale Microsoft OneDrive / Graph API Synchronisation -->
+  <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js" defer></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: none;
+    }
+
+    /* Sanfte Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Animationen für den Kinder-Schlafmodus */
+    @keyframes floatMoon {
+      0%, 100% { transform: translateY(0px) rotate(-4deg); }
+      50% { transform: translateY(-12px) rotate(4deg); }
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.2; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+    .animate-moon {
+      animation: floatMoon 6s ease-in-out infinite;
+    }
+    .star {
+      position: absolute;
+      background: #fef08a;
+      border-radius: 9999px;
+      animation: twinkle var(--dur, 3s) ease-in-out infinite;
+      animation-delay: var(--delay, 0s);
+    }
+
+    /* Toast Einblend-Animation */
+    @keyframes slideUpFade {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .toast-enter {
+      animation: slideUpFade 0.25s ease-out forwards;
+    }
+
+    /* Safe Area für moderne Smartphones */
+    .pb-safe {
+      padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-indigo-100 selection:text-indigo-800">
+
+  <!-- ===================================================================== -->
+  <!-- HAUPT-APP-LAYOUT                                                      -->
+  <!-- ===================================================================== -->
+  <div id="app-shell" class="min-h-screen flex flex-col md:flex-row">
+
+    <!-- DESKTOP / TABLET SIDEBAR -->
+    <aside class="hidden md:flex md:flex-col md:w-64 lg:w-72 bg-white border-r border-slate-200/80 fixed inset-y-0 left-0 z-30 shadow-sm">
+      <div class="p-6 flex items-center gap-3 border-b border-slate-100">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center shadow-md shadow-indigo-200">
+          <i data-lucide="home" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1 class="font-extrabold text-lg tracking-tight text-slate-900 leading-tight">FamilienHub</h1>
+          <p class="text-xs text-slate-500 font-medium" id="sidebar-family-sub">Familie Meier</p>
+        </div>
+      </div>
+
+      <nav id="desktop-nav" class="flex-1 p-4 space-y-1.5 overflow-y-auto">
+        <!-- Wird dynamisch gerendert -->
+      </nav>
+
+      <!-- Sync & Sleep Quick Status in Sidebar -->
+      <div class="p-4 border-t border-slate-100 space-y-2.5 bg-slate-50/70">
+        <div id="sidebar-sleep-box" class="hidden">
+          <!-- Wird für Eltern & Admin gerendert -->
+        </div>
+        <div class="flex items-center justify-between text-xs text-slate-500 px-2">
+          <span class="flex items-center gap-1.5" id="sidebar-sync-status">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Lokal gespeichert
+          </span>
+          <span class="font-medium text-slate-400">v1.0</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- HAUPTBEREICH -->
+    <div class="flex-1 flex flex-col md:pl-64 lg:pl-72 min-h-screen">
+
+      <!-- TOP HEADER -->
+      <header class="sticky top-0 z-20 bg-white/85 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 py-3">
+        <div class="max-w-6xl mx-auto flex items-center justify-between gap-2">
+          <!-- Links: Mobile Logo + Seitentitel -->
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="md:hidden w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <i data-lucide="home" class="w-4 h-4"></i>
+            </div>
+            <div class="truncate">
+              <h2 id="page-title" class="text-base sm:text-lg font-bold text-slate-900 truncate">Übersicht</h2>
+              <p id="header-date" class="text-[11px] sm:text-xs text-slate-500 truncate"></p>
+            </div>
+          </div>
+
+          <!-- Rechts: Status Badges & Rollenwechsel -->
+          <div class="flex items-center gap-2 shrink-0">
+            <!-- Sync Status Pill (kompakt) -->
+            <button id="header-sync-btn" onclick="handleHeaderSyncClick()" title="Synchronisationsstatus"
+              class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 hover:bg-slate-200/70 text-slate-600 transition">
+              <span id="header-sync-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span id="header-sync-label">Lokal</span>
+            </button>
+
+            <!-- Schlafmodus Schnellbutton (nur Eltern & Admin) -->
+            <button id="header-sleep-btn" onclick="openSleepQuickModal()" title="Kinder-Schlafmodus"
+              class="hidden items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-semibold border transition min-h-[40px]">
+              <i data-lucide="moon" class="w-4 h-4"></i>
+              <span class="hidden sm:inline" id="header-sleep-label">Schlafmodus</span>
+            </button>
+
+            <!-- Rollenwechsel Button -->
+            <button id="role-switcher-btn" onclick="openRoleModal()"
+              class="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold border transition shadow-sm min-h-[40px]">
+              <span id="role-badge-icon"></span>
+              <span id="role-badge-text">Admin</span>
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5 opacity-70"></i>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- HAUPTINHALT -->
+      <main id="main-content" class="flex-1 px-4 sm:px-6 py-5 pb-24 md:pb-8 max-w-6xl w-full mx-auto">
+        <!-- Aktive Ansicht wird hier gerendert -->
+      </main>
+    </div>
+
+    <!-- MOBILE BOTTOM NAVIGATION -->
+    <nav id="mobile-nav" class="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.04)]">
+      <div id="mobile-nav-items" class="grid grid-cols-6 gap-0.5 px-1 pt-1.5">
+        <!-- Wird dynamisch gerendert -->
+      </div>
+    </nav>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- VOLLBILD SCHLAFMODUS OVERLAY (KINDER-ANSICHT)                         -->
+  <!-- ===================================================================== -->
+  <div id="sleep-overlay" class="hidden fixed inset-0 z-50 bg-gradient-to-b from-slate-950 via-indigo-950 to-slate-900 text-white flex flex-col items-center justify-between p-6 overflow-hidden select-none">
+    <!-- Animierte Sterne Container -->
+    <div id="sleep-stars-container" class="absolute inset-0 pointer-events-none overflow-hidden"></div>
+
+    <!-- Oberer Hinweis -->
+    <div class="relative z-10 mt-6 text-center">
+      <span class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-semibold tracking-wide uppercase">
+        <i data-lucide="moon-star" class="w-3.5 h-3.5"></i> Kinder-Ansicht geschützt
+      </span>
+    </div>
+
+    <!-- Zentrum: Mond, Uhrzeit & Botschaft -->
+    <div class="relative z-10 flex flex-col items-center text-center max-w-md">
+      <!-- Animierter Mond SVG -->
+      <div class="animate-moon mb-6">
+        <svg class="w-28 h-28 sm:w-36 sm:h-36 drop-shadow-[0_0_30px_rgba(253,224,71,0.35)]" viewBox="0 0 120 120" fill="none">
+          <path d="M74 16C48.5 16 28 36.5 28 62C28 87.5 48.5 108 74 108C85.5 108 96 103.8 104 96.8C98.5 98.3 92.6 99 86.5 99C58.6 99 36 76.4 36 48.5C36 35.8 40.7 24.2 48.5 15.3C56.4 15.8 65 16 74 16Z" fill="#FEF08A"/>
+          <circle cx="88" cy="34" r="3" fill="#FDE047" opacity="0.8"/>
+          <circle cx="98" cy="52" r="2" fill="#FEF08A" opacity="0.7"/>
+          <circle cx="76" cy="48" r="2.5" fill="#FDE047" opacity="0.6"/>
+        </svg>
+      </div>
+
+      <div id="sleep-clock" class="text-6xl sm:text-7xl font-extrabold tracking-tight text-white mb-2 tabular-nums">20:00</div>
+      <div id="sleep-date" class="text-indigo-200/80 text-sm sm:text-base font-medium mb-6">Donnerstag, 26. November</div>
+
+      <h2 class="text-2xl sm:text-3xl font-bold text-amber-200 mb-2">Schlafmodus aktiv – Gute Nacht!</h2>
+      <p class="text-indigo-200/90 text-sm sm:text-base mb-6">
+        Es ist Schlafenszeit. Träum etwas Schönes!
+      </p>
+
+      <div class="inline-flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/15 text-sm font-medium text-indigo-100">
+        <i data-lucide="sunrise" class="w-4 h-4 text-amber-300"></i>
+        <span>Aufwachzeit: <strong id="sleep-wakeup-time" class="text-white">06:30 Uhr</strong></span>
+      </div>
+    </div>
+
+    <!-- Unten: Entsperren nur per Eltern-/Admin-PIN -->
+    <div class="relative z-10 mb-4">
+      <button onclick="requestUnlockFromSleep()"
+        class="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-indigo-100 text-sm font-semibold transition min-h-[48px]">
+        <i data-lucide="lock" class="w-4 h-4"></i>
+        Eltern / Admin entsperren
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- UNIVERSAL MODAL CONTAINER                                             -->
+  <!-- ===================================================================== -->
+  <div id="modal-backdrop" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div id="modal-panel" class="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200/80 max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 id="modal-title" class="text-lg font-bold text-slate-900">Dialog</h3>
+        <button onclick="closeModal()" class="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div id="modal-body" class="p-6 overflow-y-auto space-y-4">
+        <!-- Inhalt dynamisch -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- TOAST BENACHRICHTIGUNGEN                                              -->
+  <!-- ===================================================================== -->
+  <div id="toast-container" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col gap-2 max-w-sm w-[calc(100%-2rem)] pointer-events-none"></div>
+
+  <!-- Versteckter File-Input für JSON Import -->
+  <input type="file" id="json-import-input" accept=".json,application/json" class="hidden" onchange="handleJsonImport(event)">
+
+  <!-- ===================================================================== -->
+  <!-- APPLICATION JAVASCRIPT                                                -->
+  <!-- ===================================================================== -->
+  <script>
+    // =========================================================================
+    // 1. KONSTANTEN & INITIALDATEN (Schweizer Familien-Beispieldaten)
+    // =========================================================================
+    const STORAGE_KEY = 'familienhub_data_v1';
+
+    function getDateOffset(days) {
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      return d.toISOString().split('T')[0];
+    }
+
+    const DEFAULT_STATE = {
+      familyName: 'Familie Meier',
+      pins: {
+        admin: '1234',
+        parent: '0000'
+      },
+      sleepMode: {
+        enabled: true,
+        startTime: '19:30',
+        endTime: '06:30',
+        manualActive: false
+      },
+      members: [
+        { id: 'm1', name: 'Sarah (Mama)', short: 'Mama', roleType: 'parent', color: '#ec4899', avatar: '👩' },
+        { id: 'm2', name: 'Lukas (Papa)', short: 'Papa', roleType: 'parent', color: '#3b82f6', avatar: '👨' },
+        { id: 'm3', name: 'Mia', short: 'Mia', roleType: 'child', color: '#8b5cf6', avatar: '👧', stars: 14 },
+        { id: 'm4', name: 'Noah', short: 'Noah', roleType: 'child', color: '#10b981', avatar: '👦', stars: 11 }
+      ],
+      calendar: {
+        googleEmbedUrl: '',
+        googleIcsUrl: '',
+        events: [
+          { id: 'e1', title: 'Fussballtraining Noah', date: getDateOffset(0), time: '17:00', memberId: 'm4', location: 'Sportplatz', notes: 'Stollenschuhe & Trinkflasche' },
+          { id: 'e2', title: 'Elternabend Primarschule', date: getDateOffset(1), time: '19:00', memberId: 'm1', location: 'Schulhaus Dorf', notes: 'Zimmer 204' },
+          { id: 'e3', title: 'Musikschule Klavier Mia', date: getDateOffset(2), time: '16:15', memberId: 'm3', location: 'Musikschule', notes: 'Notenheft einpacken' },
+          { id: 'e4', title: 'Familien-Wanderung & Bräteln', date: getDateOffset(3), time: '10:00', memberId: 'all', location: 'Jurapark', notes: 'Cervelats & Brot mitnehmen' },
+          { id: 'e5', title: 'Zahnarzt-Kontrolle Kinder', date: getDateOffset(5), time: '14:30', memberId: 'm3', location: 'Praxis Dr. Keller', notes: 'Schulzahnarzt-Gutschein' }
+        ]
+      },
+      tasks: [
+        { id: 't1', title: 'Winterjacken & Handschuhe sortieren', memberId: 'm1', dueDate: getDateOffset(1), priority: 'hoch', done: false },
+        { id: 't2', title: 'Winterreifen Termin Garage abmachen', memberId: 'm2', dueDate: getDateOffset(2), priority: 'mittel', done: false },
+        { id: 't3', title: 'Bücher in der Bibliothek zurückbringen', memberId: 'm3', dueDate: getDateOffset(0), priority: 'hoch', done: false },
+        { id: 't4', title: 'Altpapier bündeln für Sammlung', memberId: 'm2', dueDate: getDateOffset(3), priority: 'niedrig', done: true }
+      ],
+      shopping: {
+        items: [
+          { id: 's1', name: 'Äpfel (Gala)', qty: '1 kg', category: 'Früchte & Gemüse', checked: false, consumptionId: null },
+          { id: 's2', name: 'Rüebli', qty: '500 g', category: 'Früchte & Gemüse', checked: false, consumptionId: null },
+          { id: 's3', name: 'Gruyère rezent', qty: '250 g', category: 'Kühlregal', checked: false, consumptionId: null },
+          { id: 's4', name: 'Teigwaren (Hörnli)', qty: '2 Pack', category: 'Vorrat', checked: true, consumptionId: null }
+        ],
+        consumption: [
+          { id: 'c1', name: 'Vollmilch (Past)', qty: '2 Liter', category: 'Kühlregal', intervalDays: 3, lastBought: getDateOffset(-4) },
+          { id: 'c2', name: 'Ruchbrot / Zopf', qty: '1 Stk', category: 'Vorrat', intervalDays: 2, lastBought: getDateOffset(-2) },
+          { id: 'c3', name: 'Freilandeier (6er)', qty: '1 Pack', category: 'Kühlregal', intervalDays: 7, lastBought: getDateOffset(-6) },
+          { id: 'c4', name: 'Bananen', qty: '1 Bund', category: 'Früchte & Gemüse', intervalDays: 4, lastBought: getDateOffset(-2) },
+          { id: 'c5', name: 'Waschmittel Color', qty: '1 Flasche', category: 'Haushalt', intervalDays: 30, lastBought: getDateOffset(-28) },
+          { id: 'c6', name: 'WC-Papier', qty: '1 Pack', category: 'Haushalt', intervalDays: 14, lastBought: getDateOffset(-5) }
+        ]
+      },
+      aemtli: [
+        { id: 'a1', title: 'Tisch decken & abräumen', memberId: 'm3', frequency: 'Täglich', stars: 2, doneToday: false, icon: '🍽️' },
+        { id: 'a2', title: 'Geschirrspüler ausräumen', memberId: 'm4', frequency: 'Täglich', stars: 2, doneToday: true, icon: '🫧' },
+        { id: 'a3', title: 'Zimmer aufräumen', memberId: 'm3', frequency: 'Mi & Sa', stars: 3, doneToday: false, icon: '🧸' },
+        { id: 'a4', title: 'Altpapier & Kehricht rausbringen', memberId: 'm4', frequency: 'Dienstag', stars: 2, doneToday: false, icon: '♻️' },
+        { id: 'a5', title: 'Pflanzen giessen', memberId: 'm3', frequency: 'Sonntag', stars: 1, doneToday: false, icon: '🪴' }
+      ],
+      helpers: {
+        menu: [
+          { day: 'Montag', lunch: 'Älplermagronen mit Apfelmus', dinner: 'Café complet (Brot, Käse, Aufschnitt)' },
+          { day: 'Dienstag', lunch: 'Pouletgeschnetzeltes mit Reis & Rüebli', dinner: 'Kürbissuppe mit Knoblauchbrot' },
+          { day: 'Mittwoch', lunch: 'Fischstäbli mit Kartoffelstock & Spinat', dinner: 'Flammkuchen selber belegen' },
+          { day: 'Donnerstag', lunch: 'Spaghetti Bolognese & grüner Salat', dinner: 'Rösti mit Spiegelei' },
+          { day: 'Freitag', lunch: 'Selbstgemachte Pizza', dinner: 'Birchermüesli & Früchte' },
+          { day: 'Samstag', lunch: 'Bräteln im Wald / Cervelat', dinner: 'Raclette gemütlich' },
+          { day: 'Sonntag', lunch: 'Sonntagsbraten mit Gratin & Bohnen', dinner: 'Zopf & Reste-Buffet' }
+        ],
+        notes: [
+          { id: 'n1', text: 'Am Freitag braucht Noah Turnzeug & Hallenschuhe!', author: 'Mama', color: 'amber', date: getDateOffset(0) },
+          { id: 'n2', text: 'WLAN-Passwort für Gäste steht im Ordner im Büro.', author: 'Papa', color: 'sky', date: getDateOffset(-2) },
+          { id: 'n3', text: 'Bitte Licht im Keller nach dem Wäscheholen löschen.', author: 'Mama', color: 'rose', date: getDateOffset(-1) }
+        ],
+        countdowns: [
+          { id: 'cd1', title: 'Weihnachten', date: `${new Date().getFullYear()}-12-24`, emoji: '🎄' },
+          { id: 'cd2', title: 'Mias Geburtstag', date: getDateOffset(42), emoji: '🎂' },
+          { id: 'cd3', title: 'Skiferien Graubünden', date: getDateOffset(75), emoji: '⛷️' }
+        ],
+        contacts: [
+          { id: 'ct1', name: 'Polizei Notruf', phone: '117', category: 'Notfall', urgent: true },
+          { id: 'ct2', name: 'Feuerwehr Notruf', phone: '118', category: 'Notfall', urgent: true },
+          { id: 'ct3', name: 'Sanität / Ambulanz', phone: '144', category: 'Notfall', urgent: true },
+          { id: 'ct4', name: 'Tox Info Suisse (Vergiftung)', phone: '145', category: 'Notfall', urgent: true },
+          { id: 'ct5', name: 'Kinderarztpraxis Dr. Weber', phone: '056 222 11 00', category: 'Arzt', urgent: false },
+          { id: 'ct6', name: 'Primarschule Sekretariat', phone: '056 288 40 10', category: 'Schule', urgent: false },
+          { id: 'ct7', name: 'Grosi & Grosspapi', phone: '079 412 34 56', category: 'Familie', urgent: false }
+        ]
+      },
+      sync: {
+        oneDriveClientId: '',
+        oneDrivePath: '/FamilienHub/daten.json',
+        autoSync: false,
+        lastSync: null
+      },
+      push: {
+        browserEnabled: false,
+        ntfyTopic: '',
+        notifyOnTask: true,
+        notifyOnShopping: true,
+        notifyOnEvent: true
+      }
+    };
+
+    const SHOPPING_CATEGORIES = ['Früchte & Gemüse', 'Kühlregal', 'Vorrat', 'Haushalt', 'Sonstiges'];
+
+    // =========================================================================
+    // 2. APP STATE & PERSISTENZ
+    // =========================================================================
+    let state = loadState();
+    let currentRole = localStorage.getItem('familienhub_role') || 'admin'; // 'admin' | 'parent' | 'child'
+    let activeTab = 'dashboard';
+    let calendarMode = 'own'; // 'own' | 'google'
+    let calendarView = 'month'; // 'month' | 'agenda'
+    let calendarCursor = new Date();
+    let shoppingSubTab = 'list'; // 'list' | 'consumption'
+    let taskFilterMember = 'all';
+    let taskFilterStatus = 'all';
+    let msalInstance = null;
+    let oneDriveAccount = null;
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return structuredClone(DEFAULT_STATE);
+        const parsed = JSON.parse(raw);
+        // Sanftes Mergen mit Defaults, falls neue Felder dazukommen
+        return {
+          ...structuredClone(DEFAULT_STATE),
+          ...parsed,
+          pins: { ...DEFAULT_STATE.pins, ...(parsed.pins || {}) },
+          sleepMode: { ...DEFAULT_STATE.sleepMode, ...(parsed.sleepMode || {}) },
+          calendar: { ...DEFAULT_STATE.calendar, ...(parsed.calendar || {}) },
+          shopping: { ...DEFAULT_STATE.shopping, ...(parsed.shopping || {}) },
+          helpers: { ...DEFAULT_STATE.helpers, ...(parsed.helpers || {}) },
+          sync: { ...DEFAULT_STATE.sync, ...(parsed.sync || {}) },
+          push: { ...DEFAULT_STATE.push, ...(parsed.push || {}) }
+        };
+      } catch (e) {
+        console.error('Fehler beim Laden aus localStorage:', e);
+        return structuredClone(DEFAULT_STATE);
+      }
+    }
+
+    function saveState(triggerAutoSync = true) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        updateSyncBadge('local');
+        if (triggerAutoSync && state.sync.autoSync && oneDriveAccount) {
+          syncToOneDrive(true);
+        }
+      } catch (e) {
+        console.error('Fehler beim Speichern:', e);
+        showToast('Speicherfehler im Browser (Speicher voll?)', 'error');
+      }
+    }
+
+    function canEdit() {
+      return currentRole === 'admin' || currentRole === 'parent';
+    }
+
+    function isAdmin() {
+      return currentRole === 'admin';
+    }
+
+    function uid(prefix = 'id') {
+      return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    }
+
+    // =========================================================================
+    // 3. HILFSFUNKTIONEN (Datum, Formatierung, Escape)
+    // =========================================================================
+    function esc(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatDateCH(isoDate) {
+      if (!isoDate) return '';
+      const parts = isoDate.split('-');
+      if (parts.length !== 3) return isoDate;
+      return `${parts[2]}.${parts[1]}.${parts[0]}`;
+    }
+
+    function daysBetween(dateStrA, dateStrB) {
+      const a = new Date(dateStrA + 'T00:00:00');
+      const b = new Date(dateStrB + 'T00:00:00');
+      return Math.round((b - a) / (1000 * 60 * 60 * 24));
+    }
+
+    function todayISO() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    function getMember(id) {
+      if (id === 'all') return { id: 'all', name: 'Alle', short: 'Alle', color: '#6366f1', avatar: '👨‍👩‍👧‍👦' };
+      return state.members.find(m => m.id === id) || { id: '?', name: 'Unbekannt', short: '?', color: '#94a3b8', avatar: '👤' };
+    }
+
+    function getConsumptionStatus(item) {
+      const elapsed = Math.max(0, daysBetween(item.lastBought, todayISO()));
+      const remaining = item.intervalDays - elapsed;
+      const pct = Math.min(100, Math.round((elapsed / Math.max(1, item.intervalDays)) * 100));
+      let status = 'ok';
+      if (remaining <= 0) status = 'due';
+      else if (remaining <= 1 || pct >= 80) status = 'soon';
+      return { elapsed, remaining, pct, status };
+    }
+
+    // =========================================================================
+    // 4. TOAST & MODAL SYSTEM (Kein alert/confirm!)
+    // =========================================================================
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const colors = {
+        info: 'bg-slate-900 text-white border-slate-700',
+        success: 'bg-emerald-600 text-white border-emerald-500',
+        warning: 'bg-amber-500 text-white border-amber-400',
+        error: 'bg-rose-600 text-white border-rose-500'
+      };
+      const icons = {
+        info: 'info',
+        success: 'check-circle-2',
+        warning: 'alert-triangle',
+        error: 'x-circle'
+      };
+      const el = document.createElement('div');
+      el.className = `toast-enter pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-lg border text-sm font-medium ${colors[type] || colors.info}`;
+      el.innerHTML = `<i data-lucide="${icons[type] || 'info'}" class="w-4 h-4 shrink-0"></i><span class="flex-1">${esc(message)}</span>`;
+      container.appendChild(el);
+      if (window.lucide) lucide.createIcons({ nodes: [el] });
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(8px)';
+        el.style.transition = 'all 0.25s ease';
+        setTimeout(() => el.remove(), 260);
+      }, 3400);
+    }
+
+    function openModal(title, bodyHtml) {
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-body').innerHTML = bodyHtml;
+      document.getElementById('modal-backdrop').classList.remove('hidden');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function closeModal() {
+      document.getElementById('modal-backdrop').classList.add('hidden');
+    }
+
+    // Klick ausserhalb schliesst Modal
+    document.getElementById('modal-backdrop').addEventListener('click', (e) => {
+      if (e.target.id === 'modal-backdrop') closeModal();
+    });
+
+    function openConfirmModal(title, message, onConfirm) {
+      window._pendingConfirmAction = onConfirm;
+      openModal(title, `
+        <p class="text-slate-600 text-sm leading-relaxed">${esc(message)}</p>
+        <div class="flex items-center justify-end gap-2 pt-4">
+          <button onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition min-h-[44px]">Abbrechen</button>
+          <button onclick="executeConfirmModal()" class="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-sm transition min-h-[44px]">Bestätigen</button>
+        </div>
+      `);
+    }
+
+    function executeConfirmModal() {
+      closeModal();
+      if (typeof window._pendingConfirmAction === 'function') {
+        const fn = window._pendingConfirmAction;
+        window._pendingConfirmAction = null;
+        fn();
+      }
+    }
+
+    // =========================================================================
+    // 5. ROLLEN- & PIN-SYSTEM
+    // =========================================================================
+    function openRoleModal() {
+      const roles = [
+        { id: 'admin', label: 'Admin', desc: 'Vollzugriff inkl. Cloud, Push, PINs & Mitglieder', icon: 'shield-check', color: 'indigo', pin: true },
+        { id: 'parent', label: 'Eltern', desc: 'Kalender, Aufgaben, Einkauf, Ämtli & Schlafmodus', icon: 'users', color: 'emerald', pin: true },
+        { id: 'child', label: 'Kinder (Nur Lesen)', desc: 'Übersichtlicher Modus ohne Bearbeiten & mit Schlafmodus', icon: 'smile', color: 'amber', pin: false }
+      ];
+
+      const html = `
+        <div class="space-y-3">
+          ${roles.map(r => {
+            const active = currentRole === r.id;
+            return `
+              <button onclick="selectRole('${r.id}')" class="w-full flex items-center gap-3.5 p-4 rounded-2xl border-2 text-left transition min-h-[64px] ${active ? 'border-indigo-500 bg-indigo-50/60' : 'border-slate-200 hover:border-slate-300 bg-white'}">
+                <div class="w-11 h-11 rounded-xl bg-${r.color}-100 text-${r.color}-600 flex items-center justify-center shrink-0">
+                  <i data-lucide="${r.icon}" class="w-5 h-5"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-slate-900">${r.label}</span>
+                    ${active ? '<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-600 text-white">Aktiv</span>' : ''}
+                  </div>
+                  <p class="text-xs text-slate-500 mt-0.5">${r.desc}</p>
+                </div>
+                ${r.pin ? '<i data-lucide="lock" class="w-4 h-4 text-slate-400 shrink-0"></i>' : '<i data-lucide="unlock" class="w-4 h-4 text-emerald-500 shrink-0"></i>'}
+              </button>
+            `;
+          }).join('')}
+        </div>
+        <p class="text-xs text-slate-400 text-center pt-1">Standard-PINs: Admin = 1234 • Eltern = 0000</p>
+      `;
+      openModal('Profil / Rolle wechseln', html);
+    }
+
+    function selectRole(targetRole) {
+      if (targetRole === currentRole) {
+        closeModal();
+        return;
+      }
+      if (targetRole === 'child') {
+        applyRole('child');
+        closeModal();
+        showToast('Kinder-Ansicht (Nur Lesen) aktiviert', 'info');
+        return;
+      }
+      openPinPrompt(targetRole, () => {
+        applyRole(targetRole);
+        closeModal();
+        showToast(`Gewechselt zu: ${targetRole === 'admin' ? 'Admin' : 'Eltern'}`, 'success');
+      });
+    }
+
+    let pinBuffer = '';
+    let pinTargetRole = null;
+    let pinSuccessCallback = null;
+
+    function openPinPrompt(roleToVerify, onSuccess, customTitle = null) {
+      pinBuffer = '';
+      pinTargetRole = roleToVerify; // 'admin' | 'parent' | 'any_adult'
+      pinSuccessCallback = onSuccess;
+
+      const label = roleToVerify === 'admin' ? 'Admin-PIN' : roleToVerify === 'parent' ? 'Eltern-PIN' : 'Eltern- oder Admin-PIN';
+      const title = customTitle || `${label} eingeben`;
+
+      const html = `
+        <div class="flex flex-col items-center">
+          <p class="text-sm text-slate-500 mb-4">Bitte 4-stelligen PIN eingeben</p>
+          <div id="pin-dots" class="flex items-center gap-3 mb-2">
+            ${[0,1,2,3].map(() => `<div class="w-4 h-4 rounded-full border-2 border-slate-300 bg-white transition-all"></div>`).join('')}
+          </div>
+          <p id="pin-error" class="text-xs text-rose-600 font-semibold h-5 mb-3"></p>
+          <div class="grid grid-cols-3 gap-3 w-full max-w-[260px]">
+            ${[1,2,3,4,5,6,7,8,9].map(n => `
+              <button onclick="pressPinKey('${n}')" class="h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-xl font-bold text-slate-800 transition">${n}</button>
+            `).join('')}
+            <button onclick="clearPinKey()" class="h-14 rounded-2xl bg-slate-50 hover:bg-slate-100 text-sm font-semibold text-slate-500 transition">C</button>
+            <button onclick="pressPinKey('0')" class="h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-xl font-bold text-slate-800 transition">0</button>
+            <button onclick="backspacePinKey()" class="h-14 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition">
+              <i data-lucide="delete" class="w-5 h-5"></i>
+            </button>
+          </div>
+        </div>
+      `;
+      openModal(title, html);
+    }
+
+    function updatePinDots() {
+      const container = document.getElementById('pin-dots');
+      if (!container) return;
+      Array.from(container.children).forEach((dot, idx) => {
+        if (idx < pinBuffer.length) {
+          dot.className = 'w-4 h-4 rounded-full border-2 border-indigo-600 bg-indigo-600 scale-110 transition-all';
+        } else {
+          dot.className = 'w-4 h-4 rounded-full border-2 border-slate-300 bg-white transition-all';
+        }
+      });
+    }
+
+    function pressPinKey(digit) {
+      if (pinBuffer.length >= 4) return;
+      pinBuffer += digit;
+      document.getElementById('pin-error').textContent = '';
+      updatePinDots();
+
+      if (pinBuffer.length === 4) {
+        setTimeout(() => {
+          let valid = false;
+          let matchedRole = pinTargetRole;
+          if (pinTargetRole === 'admin' && pinBuffer === state.pins.admin) valid = true;
+          else if (pinTargetRole === 'parent' && (pinBuffer === state.pins.parent || pinBuffer === state.pins.admin)) valid = true;
+          else if (pinTargetRole === 'any_adult') {
+            if (pinBuffer === state.pins.admin) { valid = true; matchedRole = 'admin'; }
+            else if (pinBuffer === state.pins.parent) { valid = true; matchedRole = 'parent'; }
+          }
+
+          if (valid) {
+            const cb = pinSuccessCallback;
+            pinSuccessCallback = null;
+            if (cb) cb(matchedRole);
+          } else {
+            pinBuffer = '';
+            updatePinDots();
+            const err = document.getElementById('pin-error');
+            if (err) err.textContent = 'Falscher PIN. Bitte nochmals versuchen.';
+          }
+        }, 120);
+      }
+    }
+
+    function clearPinKey() {
+      pinBuffer = '';
+      updatePinDots();
+    }
+
+    function backspacePinKey() {
+      pinBuffer = pinBuffer.slice(0, -1);
+      updatePinDots();
+    }
+
+    function applyRole(role) {
+      currentRole = role;
+      localStorage.setItem('familienhub_role', role);
+      if (role !== 'admin' && activeTab === 'admin') {
+        activeTab = 'dashboard';
+      }
+      renderApp();
+      checkSleepMode();
+    }
+
+    // =========================================================================
+    // 6. SCHLAFMODUS FÜR KINDER
+    // =========================================================================
+    function isWithinSleepWindow() {
+      if (!state.sleepMode.enabled) return false;
+      const now = new Date();
+      const curMins = now.getHours() * 60 + now.getMinutes();
+      const [sh, sm] = state.sleepMode.startTime.split(':').map(Number);
+      const [eh, em] = state.sleepMode.endTime.split(':').map(Number);
+      const startMins = sh * 60 + sm;
+      const endMins = eh * 60 + em;
+
+      if (startMins <= endMins) {
+        return curMins >= startMins && curMins < endMins;
+      } else {
+        // Über Mitternacht (z.B. 19:30 bis 06:30)
+        return curMins >= startMins || curMins < endMins;
+      }
+    }
+
+    function isSleepCurrentlyActive() {
+      return state.sleepMode.manualActive || isWithinSleepWindow();
+    }
+
+    function initSleepStars() {
+      const container = document.getElementById('sleep-stars-container');
+      if (!container || container.children.length > 0) return;
+      for (let i = 0; i < 45; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        const size = Math.random() * 3 + 1.5;
+        star.style.width = `${size}px`;
+        star.style.height = `${size}px`;
+        star.style.left = `${Math.random() * 100}%`;
+        star.style.top = `${Math.random() * 85}%`;
+        star.style.setProperty('--dur', `${2.5 + Math.random() * 3.5}s`);
+        star.style.setProperty('--delay', `${Math.random() * 4}s`);
+        container.appendChild(star);
+      }
+    }
+
+    function checkSleepMode() {
+      const overlay = document.getElementById('sleep-overlay');
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+      const dateStr = now.toLocaleDateString('de-CH', { weekday: 'long', day: 'numeric', month: 'long' });
+
+      const clockEl = document.getElementById('sleep-clock');
+      const dateEl = document.getElementById('sleep-date');
+      const wakeEl = document.getElementById('sleep-wakeup-time');
+      if (clockEl) clockEl.textContent = timeStr;
+      if (dateEl) dateEl.textContent = dateStr;
+      if (wakeEl) wakeEl.textContent = `${state.sleepMode.endTime} Uhr`;
+
+      const shouldBlock = currentRole === 'child' && isSleepCurrentlyActive();
+      if (shouldBlock) {
+        initSleepStars();
+        overlay.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons({ nodes: [overlay] });
+      } else {
+        overlay.classList.add('hidden');
+      }
+      updateSleepButtons();
+    }
+
+    function updateSleepButtons() {
+      const active = isSleepCurrentlyActive();
+      const headerBtn = document.getElementById('header-sleep-btn');
+      const headerLabel = document.getElementById('header-sleep-label');
+      const sidebarBox = document.getElementById('sidebar-sleep-box');
+
+      if (canEdit()) {
+        headerBtn.classList.remove('hidden');
+        headerBtn.classList.add('inline-flex');
+        if (active) {
+          headerBtn.className = 'inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-semibold border transition min-h-[40px] bg-indigo-950 text-amber-200 border-indigo-800 hover:bg-indigo-900';
+          headerLabel.textContent = 'Schlaf aktiv';
+        } else {
+          headerBtn.className = 'inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-semibold border transition min-h-[40px] bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200';
+          headerLabel.textContent = 'Schlafmodus';
+        }
+
+        sidebarBox.classList.remove('hidden');
+        sidebarBox.innerHTML = `
+          <button onclick="openSleepQuickModal()" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold border transition ${active ? 'bg-indigo-950 text-amber-200 border-indigo-800' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}">
+            <span class="flex items-center gap-2">
+              <i data-lucide="moon" class="w-4 h-4"></i>
+              Kinder-Schlafmodus
+            </span>
+            <span class="px-2 py-0.5 rounded-full text-[10px] ${active ? 'bg-amber-300/20 text-amber-200' : 'bg-slate-100 text-slate-500'}">${active ? 'AKTIV' : 'AUS'}</span>
+          </button>
+        `;
+      } else {
+        headerBtn.classList.add('hidden');
+        headerBtn.classList.remove('inline-flex');
+        sidebarBox.classList.add('hidden');
+      }
+    }
+
+    function requestUnlockFromSleep() {
+      openPinPrompt('any_adult', (matchedRole) => {
+        closeModal();
+        applyRole(matchedRole);
+        showToast(`Entsperrt als ${matchedRole === 'admin' ? 'Admin' : 'Eltern'}`, 'success');
+      }, 'Schlafmodus entsperren');
+    }
+
+    function openSleepQuickModal() {
+      if (!canEdit()) return;
+      const sm = state.sleepMode;
+      openModal('Kinder-Schlafmodus steuern', `
+        <div class="space-y-4">
+          <div class="p-4 rounded-2xl ${sm.manualActive ? 'bg-indigo-950 text-white' : 'bg-slate-50 border border-slate-200'} flex items-center justify-between gap-3">
+            <div>
+              <h4 class="font-bold text-sm">Sofort-Schlafmodus (Manuell)</h4>
+              <p class="text-xs ${sm.manualActive ? 'text-indigo-200' : 'text-slate-500'} mt-0.5">Sperrt die Kinder-Ansicht sofort unabhängig von der Uhrzeit.</p>
+            </div>
+            <button onclick="toggleManualSleep()" class="px-4 py-2.5 rounded-xl font-bold text-xs transition shrink-0 min-h-[44px] ${sm.manualActive ? 'bg-amber-300 text-slate-950' : 'bg-indigo-600 text-white hover:bg-indigo-700'}">
+              ${sm.manualActive ? 'Deaktivieren' : 'Sofort aktivieren'}
+            </button>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-white border border-slate-200 space-y-3">
+            <label class="flex items-center justify-between cursor-pointer">
+              <span class="text-sm font-semibold text-slate-800">Automatische Schlafenszeit</span>
+              <input type="checkbox" id="sm-enabled" ${sm.enabled ? 'checked' : ''} class="w-5 h-5 accent-indigo-600 rounded">
+            </label>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1">Start (Abends)</label>
+                <input type="time" id="sm-start" value="${esc(sm.startTime)}" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1">Ende (Aufwachzeit)</label>
+                <input type="time" id="sm-end" value="${esc(sm.endTime)}" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold">
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between gap-2 pt-2">
+            <button onclick="testSleepAsChild()" class="px-3.5 py-2.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-xs transition min-h-[44px]">
+              Als Kind testen
+            </button>
+            <button onclick="saveSleepSettingsFromModal()" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm transition min-h-[44px]">
+              Speichern
+            </button>
+          </div>
+        </div>
+      `);
+    }
+
+    function toggleManualSleep() {
+      state.sleepMode.manualActive = !state.sleepMode.manualActive;
+      saveState();
+      checkSleepMode();
+      openSleepQuickModal();
+      showToast(state.sleepMode.manualActive ? 'Sofort-Schlafmodus für Kinder aktiviert' : 'Sofort-Schlafmodus beendet', 'info');
+    }
+
+    function saveSleepSettingsFromModal() {
+      state.sleepMode.enabled = document.getElementById('sm-enabled').checked;
+      state.sleepMode.startTime = document.getElementById('sm-start').value || '19:30';
+      state.sleepMode.endTime = document.getElementById('sm-end').value || '06:30';
+      saveState();
+      checkSleepMode();
+      closeModal();
+      showToast('Schlafmodus-Zeiten gespeichert', 'success');
+    }
+
+    function testSleepAsChild() {
+      state.sleepMode.manualActive = true;
+      saveState();
+      closeModal();
+      applyRole('child');
+    }
+
+    // =========================================================================
+    // 7. PUSH-BENACHRICHTIGUNGEN (Browser Notification API + ntfy.sh)
+    // =========================================================================
+    async function requestBrowserPushPermission() {
+      if (!('Notification' in window)) {
+        showToast('Dieser Browser unterstützt keine Push-Benachrichtigungen.', 'warning');
+        return;
+      }
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          state.push.browserEnabled = true;
+          saveState();
+          showToast('Browser-Benachrichtigungen aktiviert!', 'success');
+          sendPushNotification('FamilienHub verbunden', 'Push-Benachrichtigungen sind jetzt aktiv.');
+          if (activeTab === 'admin') renderApp();
+        } else {
+          showToast('Berechtigung für Benachrichtigungen wurde abgelehnt.', 'warning');
+        }
+      } catch (e) {
+        showToast('Fehler bei der Benachrichtigungs-Anfrage.', 'error');
+      }
+    }
+
+    async function sendPushNotification(title, body, isTest = false) {
+      let sentAny = false;
+
+      // 1. Browser Notification API
+      if ('Notification' in window && Notification.permission === 'granted' && (state.push.browserEnabled || isTest)) {
+        try {
+          new Notification(title, { body, icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🏠</text></svg>' });
+          sentAny = true;
+        } catch (e) {
+          console.warn('Browser Notification Fehler:', e);
+        }
+      }
+
+      // 2. ntfy.sh Webhook für echte Handy-Push-Nachrichten
+      const topic = (state.push.ntfyTopic || '').trim();
+      if (topic) {
+        try {
+          await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+            method: 'POST',
+            body: body,
+            headers: {
+              'Title': title,
+              'Tags': 'house,bell'
+            }
+          });
+          sentAny = true;
+        } catch (e) {
+          console.warn('ntfy.sh Push Fehler:', e);
+          if (isTest) showToast('ntfy.sh konnte nicht erreicht werden.', 'error');
+        }
+      }
+
+      if (isTest) {
+        if (sentAny) showToast('Test-Push erfolgreich gesendet!', 'success');
+        else showToast('Bitte zuerst Browser-Push erlauben oder ein ntfy.sh Topic eintragen.', 'warning');
+      }
+    }
+
+    // =========================================================================
+    // 8. ONEDRIVE SYNC (Microsoft Graph / MSAL) + JSON BACKUP
+    // =========================================================================
+    function updateSyncBadge(status = 'local') {
+      const dot = document.getElementById('header-sync-dot');
+      const label = document.getElementById('header-sync-label');
+      const side = document.getElementById('sidebar-sync-status');
+
+      const map = {
+        local: { dot: 'bg-emerald-500', text: 'Lokal gespeichert', short: 'Lokal' },
+        syncing: { dot: 'bg-amber-400 animate-pulse', text: 'Synchronisiert...', short: 'Sync...' },
+        synced: { dot: 'bg-sky-500', text: 'OneDrive aktuell', short: 'OneDrive' },
+        error: { dot: 'bg-rose-500', text: 'Sync-Fehler', short: 'Fehler' }
+      };
+      const cfg = map[status] || map.local;
+      if (dot) dot.className = `w-2 h-2 rounded-full ${cfg.dot}`;
+      if (label) label.textContent = cfg.short;
+      if (side) side.innerHTML = `<span class="w-2 h-2 rounded-full ${cfg.dot}"></span> ${cfg.text}`;
+    }
+
+    function handleHeaderSyncClick() {
+      if (isAdmin()) {
+        setTab('admin');
+      } else {
+        showToast('Daten sind sicher lokal gespeichert. Cloud-Sync verwaltet der Admin.', 'info');
+      }
+    }
+
+    function getMsalInstance() {
+      const clientId = (state.sync.oneDriveClientId || '').trim();
+      if (!clientId) {
+        showToast('Bitte zuerst eine Microsoft Entra ID Client-ID eingeben.', 'warning');
+        return null;
+      }
+      if (typeof msal === 'undefined') {
+        showToast('MSAL Bibliothek wird geladen oder ist offline.', 'error');
+        return null;
+      }
+      if (!msalInstance || msalInstance.config?.auth?.clientId !== clientId) {
+        msalInstance = new msal.PublicClientApplication({
+          auth: {
+            clientId: clientId,
+            authority: 'https://login.microsoftonline.com/consumers',
+            redirectUri: window.location.href.split('#')[0].split('?')[0]
+          },
+          cache: { cacheLocation: 'localStorage' }
+        });
+      }
+      return msalInstance;
+    }
+
+    async function getOneDriveToken() {
+      const client = getMsalInstance();
+      if (!client) return null;
+      const scopes = ['Files.ReadWrite', 'User.Read'];
+      const accounts = client.getAllAccounts();
+      if (accounts.length > 0) {
+        oneDriveAccount = accounts[0];
+        try {
+          const res = await client.acquireTokenSilent({ scopes, account: oneDriveAccount });
+          return res.accessToken;
+        } catch (e) {
+          const res = await client.acquireTokenPopup({ scopes });
+          oneDriveAccount = res.account;
+          return res.accessToken;
+        }
+      } else {
+        const res = await client.loginPopup({ scopes });
+        oneDriveAccount = res.account;
+        return res.accessToken;
+      }
+    }
+
+    async function syncToOneDrive(silent = false) {
+      try {
+        updateSyncBadge('syncing');
+        const token = await getOneDriveToken();
+        if (!token) { updateSyncBadge('local'); return; }
+        const path = (state.sync.oneDrivePath || '/FamilienHub/daten.json').replace(/^\/+/, '');
+        const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURI(path)}:/content`;
+        const resp = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(state, null, 2)
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        state.sync.lastSync = new Date().toLocaleString('de-CH');
+        saveState(false);
+        updateSyncBadge('synced');
+        if (!silent) {
+          showToast('Erfolgreich auf OneDrive gespeichert!', 'success');
+          if (activeTab === 'admin') renderApp();
+        }
+      } catch (e) {
+        console.error('OneDrive Upload Fehler:', e);
+        updateSyncBadge('error');
+        if (!silent) showToast('OneDrive-Upload fehlgeschlagen. Prüfe Client-ID & Redirect-URI.', 'error');
+      }
+    }
+
+    async function loadFromOneDrive() {
+      try {
+        updateSyncBadge('syncing');
+        const token = await getOneDriveToken();
+        if (!token) { updateSyncBadge('local'); return; }
+        const path = (state.sync.oneDrivePath || '/FamilienHub/daten.json').replace(/^\/+/, '');
+        const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURI(path)}:/content`;
+        const resp = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const cloudData = await resp.json();
+        state = { ...structuredClone(DEFAULT_STATE), ...cloudData };
+        state.sync.lastSync = new Date().toLocaleString('de-CH');
+        saveState(false);
+        updateSyncBadge('synced');
+        renderApp();
+        showToast('Daten erfolgreich von OneDrive geladen!', 'success');
+      } catch (e) {
+        console.error('OneDrive Download Fehler:', e);
+        updateSyncBadge('error');
+        showToast('Konnte Datei nicht von OneDrive laden.', 'error');
+      }
+    }
+
+    function exportJsonBackup() {
+      try {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `familienhub-backup-${todayISO()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast('JSON-Backup heruntergeladen (kann direkt in OneDrive gespeichert werden).', 'success');
+      } catch (e) {
+        showToast('Export fehlgeschlagen.', 'error');
+      }
+    }
+
+    function triggerJsonImport() {
+      document.getElementById('json-import-input').click();
+    }
+
+    function handleJsonImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (!imported.members || !imported.shopping) {
+            throw new Error('Ungültiges Format');
+          }
+          state = { ...structuredClone(DEFAULT_STATE), ...imported };
+          saveState(false);
+          renderApp();
+          showToast('Backup erfolgreich wiederhergestellt!', 'success');
+        } catch (err) {
+          showToast('Ungültige JSON-Datei.', 'error');
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    // =========================================================================
+    // 9. AUTOMATISCHE VERBRAUCHS-PRÜFUNG (EINKAUFSLISTE)
+    // =========================================================================
+    function syncDueConsumptionItems(silent = false) {
+      let addedCount = 0;
+      const addedNames = [];
+
+      state.shopping.consumption.forEach(cItem => {
+        const info = getConsumptionStatus(cItem);
+        if (info.status === 'due') {
+          const alreadyOnList = state.shopping.items.some(
+            s => !s.checked && (s.consumptionId === cItem.id || s.name.toLowerCase() === cItem.name.toLowerCase())
+          );
+          if (!alreadyOnList) {
+            state.shopping.items.unshift({
+              id: uid('s'),
+              name: cItem.name,
+              qty: cItem.qty,
+              category: cItem.category,
+              checked: false,
+              consumptionId: cItem.id
+            });
+            addedCount++;
+            addedNames.push(cItem.name);
+          }
+        }
+      });
+
+      if (addedCount > 0) {
+        saveState();
+        if (!silent) {
+          showToast(`${addedCount} fällige(r) Artikel auf die Einkaufsliste gesetzt!`, 'success');
+        }
+        if (state.push.notifyOnShopping) {
+          sendPushNotification('Einkaufsliste aktualisiert', `Automatisch ergänzt: ${addedNames.join(', ')}`);
+        }
+      } else if (!silent) {
+        showToast('Alle fälligen Artikel sind bereits auf der Einkaufsliste.', 'info');
+      }
+      return addedCount;
+    }
+
+    // =========================================================================
+    // 10. NAVIGATION & HAUPT-RENDERER
+    // =========================================================================
+    const NAV_ITEMS = [
+      { id: 'dashboard', label: 'Übersicht', short: 'Start', icon: 'layout-dashboard', roles: ['admin', 'parent', 'child'] },
+      { id: 'calendar', label: 'Kalender', short: 'Kalender', icon: 'calendar-days', roles: ['admin', 'parent', 'child'] },
+      { id: 'tasks', label: 'Aufgaben', short: 'Aufgaben', icon: 'check-square', roles: ['admin', 'parent', 'child'] },
+      { id: 'shopping', label: 'Einkaufsliste', short: 'Einkauf', icon: 'shopping-cart', roles: ['admin', 'parent', 'child'] },
+      { id: 'aemtli', label: 'Ämtliplan', short: 'Ämtli', icon: 'sparkles', roles: ['admin', 'parent', 'child'] },
+      { id: 'helpers', label: 'Alltagshelfer', short: 'Helfer', icon: 'utensils', roles: ['admin', 'parent', 'child'] },
+      { id: 'admin', label: 'Cloud & Admin', short: 'Admin', icon: 'settings', roles: ['admin'] }
+    ];
+
+    function setTab(tabId) {
+      if (tabId === 'admin' && !isAdmin()) return;
+      activeTab = tabId;
+      renderApp();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function renderNavigation() {
+      const visibleNav = NAV_ITEMS.filter(n => n.roles.includes(currentRole));
+
+      // Desktop Sidebar
+      const desktopNav = document.getElementById('desktop-nav');
+      desktopNav.innerHTML = visibleNav.map(item => {
+        const active = activeTab === item.id;
+        return `
+          <button onclick="setTab('${item.id}')"
+            class="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition min-h-[46px] ${active ? 'bg-indigo-50 text-indigo-700 shadow-sm shadow-indigo-100/50' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'}">
+            <i data-lucide="${item.icon}" class="w-5 h-5 ${active ? 'text-indigo-600' : 'text-slate-400'}"></i>
+            <span>${item.label}</span>
+          </button>
+        `;
+      }).join('');
+
+      // Mobile Bottom Bar
+      const mobileNav = document.getElementById('mobile-nav-items');
+      mobileNav.className = `grid ${visibleNav.length === 7 ? 'grid-cols-7' : 'grid-cols-6'} gap-0.5 px-1 pt-1.5`;
+      mobileNav.innerHTML = visibleNav.map(item => {
+        const active = activeTab === item.id;
+        return `
+          <button onclick="setTab('${item.id}')"
+            class="flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition min-h-[50px] ${active ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}">
+            <div class="p-1 rounded-xl ${active ? 'bg-indigo-50' : ''}">
+              <i data-lucide="${item.icon}" class="w-5 h-5"></i>
+            </div>
+            <span class="text-[10px] font-semibold mt-0.5 truncate max-w-full">${item.short}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderHeader() {
+      const navObj = NAV_ITEMS.find(n => n.id === activeTab) || NAV_ITEMS[0];
+      document.getElementById('page-title').textContent = navObj.label;
+      document.getElementById('sidebar-family-sub').textContent = state.familyName;
+
+      const now = new Date();
+      document.getElementById('header-date').textContent = now.toLocaleDateString('de-CH', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      });
+
+      const roleBtn = document.getElementById('role-switcher-btn');
+      const roleIcon = document.getElementById('role-badge-icon');
+      const roleText = document.getElementById('role-badge-text');
+
+      if (currentRole === 'admin') {
+        roleBtn.className = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold border transition shadow-sm min-h-[40px] bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100';
+        roleIcon.innerHTML = '<i data-lucide="shield-check" class="w-4 h-4"></i>';
+        roleText.textContent = 'Admin';
+      } else if (currentRole === 'parent') {
+        roleBtn.className = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold border transition shadow-sm min-h-[40px] bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100';
+        roleIcon.innerHTML = '<i data-lucide="users" class="w-4 h-4"></i>';
+        roleText.textContent = 'Eltern';
+      } else {
+        roleBtn.className = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold border transition shadow-sm min-h-[40px] bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100';
+        roleIcon.innerHTML = '<i data-lucide="smile" class="w-4 h-4"></i>';
+        roleText.textContent = 'Kinder';
+      }
+
+      updateSleepButtons();
+    }
+
+    function renderApp() {
+      renderHeader();
+      renderNavigation();
+
+      const main = document.getElementById('main-content');
+      switch (activeTab) {
+        case 'dashboard': main.innerHTML = renderDashboardView(); break;
+        case 'calendar': main.innerHTML = renderCalendarView(); break;
+        case 'tasks': main.innerHTML = renderTasksView(); break;
+        case 'shopping': main.innerHTML = renderShoppingView(); break;
+        case 'aemtli': main.innerHTML = renderAemtliView(); break;
+        case 'helpers': main.innerHTML = renderHelpersView(); break;
+        case 'admin': main.innerHTML = renderAdminView(); break;
+        default: main.innerHTML = renderDashboardView();
+      }
+
+      if (window.lucide) lucide.createIcons();
+    }
+
+    // =========================================================================
+    // 11. ANSICHT: ÜBERSICHT (DASHBOARD)
+    // =========================================================================
+    function renderDashboardView() {
+      const today = todayISO();
+      const hour = new Date().getHours();
+      const greeting = hour < 11 ? 'Guten Morgen' : hour < 17 ? 'Grüezi' : 'Guten Abend';
+
+      const todayEvents = state.calendar.events
+        .filter(e => e.date === today)
+        .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      const upcomingEvents = state.calendar.events
+        .filter(e => e.date >= today)
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''))
+        .slice(0, 4);
+
+      const openTasks = state.tasks.filter(t => !t.done);
+      const openShopping = state.shopping.items.filter(s => !s.checked);
+      const dueConsumption = state.shopping.consumption.filter(c => getConsumptionStatus(c).status === 'due');
+
+      const dayIdx = (new Date().getDay() + 6) % 7; // Montag = 0
+      const todayMenu = state.helpers.menu[dayIdx] || state.helpers.menu[0];
+
+      const sortedCountdowns = [...state.helpers.countdowns]
+        .map(c => ({ ...c, days: daysBetween(today, c.date) }))
+        .filter(c => c.days >= 0)
+        .sort((a, b) => a.days - b.days);
+
+      // Kinder-spezifisches freundliches Dashboard (Nur Lesen)
+      if (currentRole === 'child') {
+        const kids = state.members.filter(m => m.roleType === 'child');
+        return `
+          <div class="space-y-6">
+            <div class="bg-gradient-to-r from-amber-400 via-orange-400 to-rose-400 rounded-3xl p-6 text-white shadow-lg shadow-orange-200/60">
+              <div class="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-xs font-bold mb-2">
+                    <i data-lucide="eye" class="w-3.5 h-3.5"></i> Kinder-Ansicht (Nur Lesen)
+                  </span>
+                  <h2 class="text-2xl sm:text-3xl font-extrabold">${greeting}, liebe Kinder! 👋</h2>
+                  <p class="text-white/90 text-sm sm:text-base mt-1">Schau, was heute bei ${esc(state.familyName)} ansteht.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                  ${kids.map(k => `
+                    <div class="bg-white/20 backdrop-blur-sm rounded-2xl px-4 py-2.5 text-center border border-white/25">
+                      <div class="text-2xl">${esc(k.avatar)}</div>
+                      <div class="text-xs font-bold mt-0.5">${esc(k.short)}</div>
+                      <div class="text-xs font-extrabold text-amber-100">⭐ ${k.stars || 0}</div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <!-- Heutiges Menü -->
+              <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm">
+                <div class="flex items-center gap-2.5 mb-4">
+                  <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                    <i data-lucide="utensils" class="w-5 h-5"></i>
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-slate-900">Was gibt's heute zu essen?</h3>
+                    <p class="text-xs text-slate-500">${esc(todayMenu.day)}</p>
+                  </div>
+                </div>
+                <div class="space-y-3">
+                  <div class="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-100">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-700">☀️ Zmittag</span>
+                    <p class="font-semibold text-slate-800 mt-0.5">${esc(todayMenu.lunch)}</p>
+                  </div>
+                  <div class="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-100">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-700">🌙 Znacht</span>
+                    <p class="font-semibold text-slate-800 mt-0.5">${esc(todayMenu.dinner)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Eure Ämtli heute -->
+              <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center">
+                      <i data-lucide="sparkles" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-900">Eure Ämtli</h3>
+                  </div>
+                  <button onclick="setTab('aemtli')" class="text-xs font-semibold text-indigo-600 hover:underline">Alle ansehen</button>
+                </div>
+                <div class="space-y-2.5">
+                  ${state.aemtli.map(a => {
+                    const m = getMember(a.memberId);
+                    return `
+                      <div class="flex items-center justify-between p-3 rounded-2xl border ${a.doneToday ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-slate-100'}">
+                        <div class="flex items-center gap-3 min-w-0">
+                          <span class="text-xl">${esc(a.icon || '✨')}</span>
+                          <div class="min-w-0">
+                            <p class="font-semibold text-sm text-slate-800 truncate ${a.doneToday ? 'line-through text-slate-400' : ''}">${esc(a.title)}</p>
+                            <p class="text-xs text-slate-500">${esc(m.avatar)} ${esc(m.short)} • ${esc(a.frequency)}</p>
+                          </div>
+                        </div>
+                        <span class="text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${a.doneToday ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">
+                          ${a.doneToday ? 'Erledigt ✓' : `+${a.stars} ⭐`}
+                        </span>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+
+              <!-- Countdowns -->
+              <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm">
+                <div class="flex items-center gap-2.5 mb-4">
+                  <div class="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
+                    <i data-lucide="party-popper" class="w-5 h-5"></i>
+                  </div>
+                  <h3 class="font-bold text-slate-900">Worauf wir uns freuen</h3>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  ${sortedCountdowns.slice(0, 3).map(cd => `
+                    <div class="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-indigo-50/50 border border-slate-200/70 text-center">
+                      <div class="text-3xl mb-1">${esc(cd.emoji)}</div>
+                      <div class="text-2xl font-extrabold text-indigo-600">${cd.days}</div>
+                      <div class="text-[11px] font-semibold text-slate-400 uppercase">${cd.days === 1 ? 'Tag' : 'Tage'}</div>
+                      <div class="text-xs font-bold text-slate-800 mt-1 truncate">${esc(cd.title)}</div>
+                    </div>
+                  `).join('') || '<p class="text-sm text-slate-400">Keine Countdowns aktiv.</p>'}
+                </div>
+              </div>
+
+              <!-- Nächste Termine -->
+              <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center">
+                      <i data-lucide="calendar-days" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-900">Nächste Termine</h3>
+                  </div>
+                  <button onclick="setTab('calendar')" class="text-xs font-semibold text-indigo-600 hover:underline">Kalender</button>
+                </div>
+                <div class="space-y-2.5">
+                  ${upcomingEvents.map(ev => {
+                    const m = getMember(ev.memberId);
+                    return `
+                      <div class="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                        <div class="w-1.5 h-10 rounded-full shrink-0" style="background:${m.color}"></div>
+                        <div class="flex-1 min-w-0">
+                          <p class="font-semibold text-sm text-slate-800 truncate">${esc(ev.title)}</p>
+                          <p class="text-xs text-slate-500">${formatDateCH(ev.date)} ${ev.time ? '• ' + esc(ev.time) + ' Uhr' : ''} • ${esc(m.short)}</p>
+                        </div>
+                      </div>
+                    `;
+                  }).join('') || '<p class="text-sm text-slate-400">Keine anstehenden Termine.</p>'}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Eltern & Admin Dashboard
+      return `
+        <div class="space-y-6">
+          <!-- Hero Banner -->
+          <div class="bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 rounded-3xl p-6 text-white shadow-lg shadow-indigo-200/70">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight">${greeting}, ${esc(state.familyName)}!</h2>
+                <p class="text-indigo-100 text-sm mt-1">
+                  Heute: ${todayEvents.length} Termin(e), ${openTasks.length} offene Aufgaben und ${openShopping.length} Artikel auf der Einkaufsliste.
+                </p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button onclick="setTab('calendar'); setTimeout(openEventModal, 50);" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur-sm text-white text-xs font-semibold border border-white/20 transition min-h-[42px]">
+                  <i data-lucide="plus" class="w-4 h-4"></i> Termin
+                </button>
+                <button onclick="setTab('shopping')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white text-indigo-700 hover:bg-indigo-50 text-xs font-bold shadow-sm transition min-h-[42px]">
+                  <i data-lucide="shopping-cart" class="w-4 h-4"></i> Einkauf (${openShopping.length})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          ${dueConsumption.length > 0 ? `
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h4 class="font-bold text-sm text-amber-900">${dueConsumption.length} Verbrauchsartikel sind fällig!</h4>
+                  <p class="text-xs text-amber-800/80">${dueConsumption.map(d => esc(d.name)).join(', ')}</p>
+                </div>
+              </div>
+              <button onclick="syncDueConsumptionItems(false); renderApp();" class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition shrink-0 min-h-[42px]">
+                Auf Einkaufsliste setzen
+              </button>
+            </div>
+          ` : ''}
+
+          <!-- KPI Karten -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <button onclick="setTab('calendar')" class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm hover:border-indigo-300 transition text-left">
+              <div class="w-9 h-9 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center mb-3"><i data-lucide="calendar" class="w-5 h-5"></i></div>
+              <div class="text-2xl font-extrabold text-slate-900">${upcomingEvents.length}</div>
+              <div class="text-xs font-medium text-slate-500">Nächste Termine</div>
+            </button>
+            <button onclick="setTab('tasks')" class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm hover:border-indigo-300 transition text-left">
+              <div class="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mb-3"><i data-lucide="check-square" class="w-5 h-5"></i></div>
+              <div class="text-2xl font-extrabold text-slate-900">${openTasks.length}</div>
+              <div class="text-xs font-medium text-slate-500">Offene Aufgaben</div>
+            </button>
+            <button onclick="setTab('shopping')" class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm hover:border-indigo-300 transition text-left">
+              <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-3"><i data-lucide="shopping-bag" class="w-5 h-5"></i></div>
+              <div class="text-2xl font-extrabold text-slate-900">${openShopping.length}</div>
+              <div class="text-xs font-medium text-slate-500">Einkaufsartikel</div>
+            </button>
+            <button onclick="setTab('aemtli')" class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm hover:border-indigo-300 transition text-left">
+              <div class="w-9 h-9 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center mb-3"><i data-lucide="sparkles" class="w-5 h-5"></i></div>
+              <div class="text-2xl font-extrabold text-slate-900">${state.aemtli.filter(a => a.doneToday).length}/${state.aemtli.length}</div>
+              <div class="text-xs font-medium text-slate-500">Ämtli erledigt</div>
+            </button>
+          </div>
+
+          <!-- Detail-Grid -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <!-- Nächste Termine -->
+            <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="calendar-days" class="w-4 h-4 text-indigo-600"></i> Nächste Termine</h3>
+                <button onclick="setTab('calendar')" class="text-xs font-semibold text-indigo-600 hover:underline">Alle</button>
+              </div>
+              <div class="space-y-2.5">
+                ${upcomingEvents.map(ev => {
+                  const m = getMember(ev.memberId);
+                  return `
+                    <div class="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                      <div class="w-1.5 h-10 rounded-full shrink-0" style="background:${m.color}"></div>
+                      <div class="flex-1 min-w-0">
+                        <p class="font-semibold text-sm text-slate-800 truncate">${esc(ev.title)}</p>
+                        <p class="text-xs text-slate-500">${formatDateCH(ev.date)} ${ev.time ? '• ' + esc(ev.time) : ''} • ${esc(m.short)}</p>
+                      </div>
+                    </div>
+                  `;
+                }).join('') || '<p class="text-sm text-slate-400">Keine anstehenden Termine.</p>'}
+              </div>
+            </div>
+
+            <!-- Heutiges Menü & Pinnwand -->
+            <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm space-y-4">
+              <div class="flex items-center justify-between">
+                <h3 class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="utensils" class="w-4 h-4 text-emerald-600"></i> Menü heute (${esc(todayMenu.day)})</h3>
+                <button onclick="setTab('helpers')" class="text-xs font-semibold text-indigo-600 hover:underline">Plan</button>
+              </div>
+              <div class="space-y-2">
+                <div class="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-100 text-sm">
+                  <span class="text-[11px] font-bold text-emerald-700 block">MITTAG</span>
+                  <span class="font-medium text-slate-800">${esc(todayMenu.lunch)}</span>
+                </div>
+                <div class="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-100 text-sm">
+                  <span class="text-[11px] font-bold text-indigo-700 block">ABEND</span>
+                  <span class="font-medium text-slate-800">${esc(todayMenu.dinner)}</span>
+                </div>
+              </div>
+              ${state.helpers.notes[0] ? `
+                <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200/70 text-xs text-amber-900">
+                  <span class="font-bold block mb-0.5">📌 Pinnwand (${esc(state.helpers.notes[0].author)}):</span>
+                  ${esc(state.helpers.notes[0].text)}
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Offene Aufgaben -->
+            <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="check-circle-2" class="w-4 h-4 text-rose-500"></i> Offene Aufgaben</h3>
+                <button onclick="setTab('tasks')" class="text-xs font-semibold text-indigo-600 hover:underline">Alle</button>
+              </div>
+              <div class="space-y-2.5">
+                ${openTasks.slice(0, 4).map(t => {
+                  const m = getMember(t.memberId);
+                  return `
+                    <div class="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                      <button onclick="toggleTask('${t.id}')" class="w-6 h-6 rounded-lg border-2 border-slate-300 hover:border-indigo-500 flex items-center justify-center shrink-0 transition"></button>
+                      <div class="flex-1 min-w-0">
+                        <p class="font-semibold text-sm text-slate-800 truncate">${esc(t.title)}</p>
+                        <p class="text-xs text-slate-500">${esc(m.avatar)} ${esc(m.short)} • Bis ${formatDateCH(t.dueDate)}</p>
+                      </div>
+                    </div>
+                  `;
+                }).join('') || '<p class="text-sm text-slate-400">Alles erledigt! 🎉</p>'}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 12. ANSICHT: FAMILIENKALENDER + GOOGLE KALENDER
+    // =========================================================================
+    function renderCalendarView() {
+      const hasGoogle = !!(state.calendar.googleEmbedUrl || '').trim();
+
+      let contentHtml = '';
+      if (calendarMode === 'google') {
+        if (hasGoogle) {
+          contentHtml = `
+            <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                <span class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <i data-lucide="globe" class="w-4 h-4 text-indigo-600"></i> Eingebetteter Google Kalender
+                </span>
+                ${isAdmin() ? `<button onclick="setTab('admin')" class="text-xs font-semibold text-indigo-600 hover:underline">URL anpassen</button>` : ''}
+              </div>
+              <iframe src="${esc(state.calendar.googleEmbedUrl)}" class="w-full h-[65vh] min-h-[480px] border-0" loading="lazy"></iframe>
+            </div>
+          `;
+        } else {
+          contentHtml = `
+            <div class="bg-white rounded-3xl border border-slate-200/80 p-8 text-center space-y-3">
+              <div class="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+                <i data-lucide="calendar-sync" class="w-7 h-7"></i>
+              </div>
+              <h3 class="text-lg font-bold text-slate-900">Google Kalender noch nicht verknüpft</h3>
+              <p class="text-sm text-slate-500 max-w-md mx-auto">
+                Im Admin-Bereich unter <strong>Cloud & Admin</strong> kann die Google-Kalender-Einbettungs-URL (iframe) oder ICS-Feed-URL eingetragen werden.
+              </p>
+              ${isAdmin() ? `<button onclick="setTab('admin')" class="mt-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition">Jetzt einrichten</button>` : ''}
+            </div>
+          `;
+        }
+      } else {
+        // Eigener Kalender (Monat oder Agenda)
+        const year = calendarCursor.getFullYear();
+        const month = calendarCursor.getMonth();
+        const monthName = calendarCursor.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' });
+
+        if (calendarView === 'month') {
+          const firstDay = new Date(year, month, 1);
+          const lastDay = new Date(year, month + 1, 0);
+          const startWeekday = (firstDay.getDay() + 6) % 7; // Mo = 0
+          const totalDays = lastDay.getDate();
+          const todayStr = todayISO();
+
+          let cells = '';
+          for (let i = 0; i < startWeekday; i++) {
+            cells += `<div class="min-h-[74px] sm:min-h-[96px] bg-slate-50/60 border-b border-r border-slate-100 p-1.5"></div>`;
+          }
+          for (let d = 1; d <= totalDays; d++) {
+            const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dayEvents = state.calendar.events.filter(e => e.date === iso).sort((a,b) => (a.time||'').localeCompare(b.time||''));
+            const isToday = iso === todayStr;
+
+            cells += `
+              <div onclick="openDayDetailModal('${iso}')" class="min-h-[74px] sm:min-h-[96px] bg-white hover:bg-indigo-50/30 border-b border-r border-slate-100 p-1.5 cursor-pointer transition flex flex-col">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white' : 'text-slate-700'}">${d}</span>
+                  ${dayEvents.length > 0 ? `<span class="sm:hidden w-1.5 h-1.5 rounded-full bg-indigo-500"></span>` : ''}
+                </div>
+                <div class="space-y-1 flex-1 overflow-hidden">
+                  ${dayEvents.slice(0, 3).map(ev => {
+                    const m = getMember(ev.memberId);
+                    return `
+                      <div class="text-[10px] sm:text-[11px] font-semibold px-1.5 py-0.5 rounded-md truncate text-white" style="background:${m.color}">
+                        ${ev.time ? esc(ev.time) + ' ' : ''}${esc(ev.title)}
+                      </div>
+                    `;
+                  }).join('')}
+                  ${dayEvents.length > 3 ? `<div class="text-[10px] font-semibold text-slate-400 pl-1">+${dayEvents.length - 3} weitere</div>` : ''}
+                </div>
+              </div>
+            `;
+          }
+
+          contentHtml = `
+            <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <button onclick="shiftCalendarMonth(-1)" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 transition"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                  <h3 class="font-bold text-slate-900 capitalize min-w-[150px] text-center">${monthName}</h3>
+                  <button onclick="shiftCalendarMonth(1)" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 transition"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                </div>
+                <button onclick="calendarCursor = new Date(); renderApp();" class="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition">Heute</button>
+              </div>
+              <div class="grid grid-cols-7 bg-slate-50 border-b border-slate-200/80 text-center text-[11px] font-bold text-slate-500 uppercase py-2">
+                <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
+              </div>
+              <div class="grid grid-cols-7 border-l border-slate-100">
+                ${cells}
+              </div>
+            </div>
+          `;
+        } else {
+          // Agenda-Ansicht
+          const sorted = [...state.calendar.events].sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
+          contentHtml = `
+            <div class="space-y-3">
+              ${sorted.map(ev => {
+                const m = getMember(ev.memberId);
+                return `
+                  <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3.5 min-w-0">
+                      <div class="w-2 h-12 rounded-full shrink-0" style="background:${m.color}"></div>
+                      <div class="min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <span class="font-bold text-slate-900">${esc(ev.title)}</span>
+                          <span class="text-xs px-2 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600">${esc(m.avatar)} ${esc(m.short)}</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">
+                          📅 ${formatDateCH(ev.date)} ${ev.time ? '• ⏰ ' + esc(ev.time) + ' Uhr' : ''} ${ev.location ? '• 📍 ' + esc(ev.location) : ''}
+                        </p>
+                        ${ev.notes ? `<p class="text-xs text-slate-400 mt-0.5">${esc(ev.notes)}</p>` : ''}
+                      </div>
+                    </div>
+                    ${canEdit() ? `
+                      <div class="flex items-center gap-1 shrink-0">
+                        <button onclick="openEventModal('${ev.id}')" class="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                        <button onclick="deleteEvent('${ev.id}')" class="p-2.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                      </div>
+                    ` : ''}
+                  </div>
+                `;
+              }).join('') || '<div class="bg-white rounded-3xl p-8 text-center text-slate-400 border border-slate-200/80">Keine Termine vorhanden.</div>'}
+            </div>
+          `;
+        }
+      }
+
+      // Farblegende Familienmitglieder
+      const legendHtml = `
+        <div class="flex flex-wrap items-center gap-2">
+          ${[{ id: 'all', short: 'Alle', color: '#6366f1', avatar: '👨‍👩‍👧‍👦' }, ...state.members].map(m => `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-slate-200 text-xs font-medium text-slate-700">
+              <span class="w-2.5 h-2.5 rounded-full" style="background:${m.color}"></span>
+              ${esc(m.short)}
+            </span>
+          `).join('')}
+        </div>
+      `;
+
+      return `
+        <div class="space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <div class="inline-flex p-1 rounded-2xl bg-slate-200/70">
+                <button onclick="calendarMode='own'; renderApp();" class="px-3.5 py-2 rounded-xl text-xs font-bold transition ${calendarMode === 'own' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}">Familienkalender</button>
+                <button onclick="calendarMode='google'; renderApp();" class="px-3.5 py-2 rounded-xl text-xs font-bold transition ${calendarMode === 'google' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}">Google Kalender</button>
+              </div>
+              ${calendarMode === 'own' ? `
+                <div class="inline-flex p-1 rounded-2xl bg-slate-200/70">
+                  <button onclick="calendarView='month'; renderApp();" class="px-3 py-2 rounded-xl text-xs font-bold transition ${calendarView === 'month' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}">Monat</button>
+                  <button onclick="calendarView='agenda'; renderApp();" class="px-3 py-2 rounded-xl text-xs font-bold transition ${calendarView === 'agenda' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}">Agenda</button>
+                </div>
+              ` : ''}
+            </div>
+            ${canEdit() && calendarMode === 'own' ? `
+              <button onclick="openEventModal()" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition min-h-[44px]">
+                <i data-lucide="plus" class="w-4 h-4"></i> Neuer Termin
+              </button>
+            ` : ''}
+          </div>
+
+          ${calendarMode === 'own' ? legendHtml : ''}
+          ${contentHtml}
+        </div>
+      `;
+    }
+
+    function shiftCalendarMonth(delta) {
+      calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + delta, 1);
+      renderApp();
+    }
+
+    function openDayDetailModal(isoDate) {
+      const events = state.calendar.events.filter(e => e.date === isoDate).sort((a,b) => (a.time||'').localeCompare(b.time||''));
+      openModal(`Termine am ${formatDateCH(isoDate)}`, `
+        <div class="space-y-3">
+          ${events.map(ev => {
+            const m = getMember(ev.memberId);
+            return `
+              <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-start justify-between gap-2">
+                <div class="flex items-start gap-3">
+                  <div class="w-2 h-10 rounded-full mt-0.5 shrink-0" style="background:${m.color}"></div>
+                  <div>
+                    <p class="font-bold text-slate-900 text-sm">${esc(ev.title)}</p>
+                    <p class="text-xs text-slate-500 mt-0.5">${ev.time ? esc(ev.time) + ' Uhr • ' : ''}${esc(m.avatar)} ${esc(m.short)} ${ev.location ? '• ' + esc(ev.location) : ''}</p>
+                    ${ev.notes ? `<p class="text-xs text-slate-500 mt-1">${esc(ev.notes)}</p>` : ''}
+                  </div>
+                </div>
+                ${canEdit() ? `
+                  <div class="flex gap-1">
+                    <button onclick="openEventModal('${ev.id}')" class="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-white"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                    <button onclick="deleteEvent('${ev.id}'); closeModal();" class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-white"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('') || '<p class="text-sm text-slate-400 text-center py-4">Keine Termine an diesem Tag.</p>'}
+          ${canEdit() ? `
+            <button onclick="openEventModal(null, '${isoDate}')" class="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm transition">
+              + Termin für ${formatDateCH(isoDate)} hinzufügen
+            </button>
+          ` : ''}
+        </div>
+      `);
+    }
+
+    function openEventModal(eventId = null, defaultDate = null) {
+      if (!canEdit()) return;
+      const ev = eventId ? state.calendar.events.find(e => e.id === eventId) : null;
+      const memberOptions = [
+        `<option value="all" ${(!ev || ev.memberId === 'all') ? 'selected' : ''}>👨‍👩‍👧‍👦 Ganze Familie</option>`,
+        ...state.members.map(m => `<option value="${m.id}" ${ev && ev.memberId === m.id ? 'selected' : ''}>${esc(m.avatar)} ${esc(m.name)}</option>`)
+      ].join('');
+
+      openModal(ev ? 'Termin bearbeiten' : 'Neuer Termin', `
+        <form onsubmit="saveEventForm(event, '${ev ? ev.id : ''}')" class="space-y-3.5">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Titel *</label>
+            <input id="ev-title" required value="${esc(ev?.title || '')}" placeholder="z.B. Fussballtraining, Arzttermin" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Datum *</label>
+              <input id="ev-date" type="date" required value="${esc(ev?.date || defaultDate || todayISO())}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Uhrzeit</label>
+              <input id="ev-time" type="time" value="${esc(ev?.time || '')}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Für wen?</label>
+              <select id="ev-member" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white">${memberOptions}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Ort</label>
+              <input id="ev-location" value="${esc(ev?.location || '')}" placeholder="z.B. Schulhaus" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Notizen</label>
+            <textarea id="ev-notes" rows="2" placeholder="Optionale Infos..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">${esc(ev?.notes || '')}</textarea>
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm">Abbrechen</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm">Speichern</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveEventForm(e, eventId) {
+      e.preventDefault();
+      const data = {
+        id: eventId || uid('e'),
+        title: document.getElementById('ev-title').value.trim(),
+        date: document.getElementById('ev-date').value,
+        time: document.getElementById('ev-time').value,
+        memberId: document.getElementById('ev-member').value,
+        location: document.getElementById('ev-location').value.trim(),
+        notes: document.getElementById('ev-notes').value.trim()
+      };
+      if (eventId) {
+        const idx = state.calendar.events.findIndex(x => x.id === eventId);
+        if (idx >= 0) state.calendar.events[idx] = data;
+      } else {
+        state.calendar.events.push(data);
+        if (state.push.notifyOnEvent) {
+          sendPushNotification('Neuer Familientermin', `${data.title} am ${formatDateCH(data.date)} ${data.time ? 'um ' + data.time : ''}`);
+        }
+      }
+      saveState();
+      closeModal();
+      renderApp();
+      showToast(eventId ? 'Termin aktualisiert' : 'Termin erstellt', 'success');
+    }
+
+    function deleteEvent(id) {
+      if (!canEdit()) return;
+      openConfirmModal('Termin löschen', 'Möchtest du diesen Termin wirklich löschen?', () => {
+        state.calendar.events = state.calendar.events.filter(e => e.id !== id);
+        saveState();
+        renderApp();
+        showToast('Termin gelöscht', 'info');
+      });
+    }
+
+    // =========================================================================
+    // 13. ANSICHT: AUFGABEN-MANAGER
+    // =========================================================================
+    function renderTasksView() {
+      const filtered = state.tasks.filter(t => {
+        if (taskFilterMember !== 'all' && t.memberId !== taskFilterMember) return false;
+        if (taskFilterStatus === 'open' && t.done) return false;
+        if (taskFilterStatus === 'done' && !t.done) return false;
+        return true;
+      }).sort((a, b) => Number(a.done) - Number(b.done) || (a.dueDate || '').localeCompare(b.dueDate || ''));
+
+      const prioStyles = {
+        hoch: 'bg-rose-100 text-rose-700',
+        mittel: 'bg-amber-100 text-amber-700',
+        niedrig: 'bg-slate-100 text-slate-600'
+      };
+
+      return `
+        <div class="space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <select onchange="taskFilterMember=this.value; renderApp();" class="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 min-h-[42px]">
+                <option value="all" ${taskFilterMember === 'all' ? 'selected' : ''}>Alle Personen</option>
+                ${state.members.map(m => `<option value="${m.id}" ${taskFilterMember === m.id ? 'selected' : ''}>${esc(m.avatar)} ${esc(m.short)}</option>`).join('')}
+              </select>
+              <div class="inline-flex p-1 rounded-xl bg-slate-200/70">
+                ${[['all', 'Alle'], ['open', 'Offen'], ['done', 'Erledigt']].map(([val, lbl]) => `
+                  <button onclick="taskFilterStatus='${val}'; renderApp();" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${taskFilterStatus === val ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}">${lbl}</button>
+                `).join('')}
+              </div>
+            </div>
+            ${canEdit() ? `
+              <button onclick="openTaskModal()" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition min-h-[44px]">
+                <i data-lucide="plus" class="w-4 h-4"></i> Neue Aufgabe
+              </button>
+            ` : ''}
+          </div>
+
+          <div class="space-y-2.5">
+            ${filtered.map(t => {
+              const m = getMember(t.memberId);
+              const overdue = !t.done && t.dueDate && t.dueDate < todayISO();
+              return `
+                <div class="bg-white rounded-2xl p-4 border ${t.done ? 'border-slate-100 opacity-75' : 'border-slate-200/80'} shadow-sm flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-3.5 min-w-0">
+                    ${canEdit() ? `
+                      <button onclick="toggleTask('${t.id}')" class="w-7 h-7 rounded-xl border-2 flex items-center justify-center shrink-0 transition ${t.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 hover:border-indigo-500'}">
+                        ${t.done ? '<i data-lucide="check" class="w-4 h-4"></i>' : ''}
+                      </button>
+                    ` : `
+                      <div class="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${t.done ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}">
+                        <i data-lucide="${t.done ? 'check' : 'circle'}" class="w-4 h-4"></i>
+                      </div>
+                    `}
+                    <div class="min-w-0">
+                      <p class="font-bold text-sm sm:text-base ${t.done ? 'line-through text-slate-400' : 'text-slate-900'}">${esc(t.title)}</p>
+                      <div class="flex items-center gap-2 flex-wrap mt-1">
+                        <span class="text-xs text-slate-500">${esc(m.avatar)} ${esc(m.short)}</span>
+                        <span class="text-xs font-medium ${overdue ? 'text-rose-600 font-bold' : 'text-slate-500'}">📅 ${formatDateCH(t.dueDate)}</span>
+                        <span class="text-[11px] font-bold px-2 py-0.5 rounded-full uppercase ${prioStyles[t.priority] || prioStyles.mittel}">${esc(t.priority)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  ${canEdit() ? `
+                    <div class="flex items-center gap-1 shrink-0">
+                      <button onclick="openTaskModal('${t.id}')" class="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                      <button onclick="deleteTask('${t.id}')" class="p-2.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+            }).join('') || '<div class="bg-white rounded-3xl p-8 text-center text-slate-400 border border-slate-200/80">Keine Aufgaben für diesen Filter gefunden.</div>'}
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleTask(id) {
+      if (!canEdit()) return;
+      const t = state.tasks.find(x => x.id === id);
+      if (t) {
+        t.done = !t.done;
+        saveState();
+        renderApp();
+      }
+    }
+
+    function openTaskModal(taskId = null) {
+      if (!canEdit()) return;
+      const t = taskId ? state.tasks.find(x => x.id === taskId) : null;
+      openModal(t ? 'Aufgabe bearbeiten' : 'Neue Aufgabe', `
+        <form onsubmit="saveTaskForm(event, '${t ? t.id : ''}')" class="space-y-3.5">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Aufgabe *</label>
+            <input id="tk-title" required value="${esc(t?.title || '')}" placeholder="Was muss erledigt werden?" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Zuständig</label>
+              <select id="tk-member" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white">
+                ${state.members.map(m => `<option value="${m.id}" ${t && t.memberId === m.id ? 'selected' : ''}>${esc(m.avatar)} ${esc(m.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Fällig bis</label>
+              <input id="tk-due" type="date" value="${esc(t?.dueDate || todayISO())}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Priorität</label>
+            <select id="tk-prio" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white">
+              <option value="hoch" ${t?.priority === 'hoch' ? 'selected' : ''}>🔴 Hoch</option>
+              <option value="mittel" ${(!t || t.priority === 'mittel') ? 'selected' : ''}>🟠 Mittel</option>
+              <option value="niedrig" ${t?.priority === 'niedrig' ? 'selected' : ''}>⚪ Niedrig</option>
+            </select>
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm">Abbrechen</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm">Speichern</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveTaskForm(e, taskId) {
+      e.preventDefault();
+      const data = {
+        id: taskId || uid('t'),
+        title: document.getElementById('tk-title').value.trim(),
+        memberId: document.getElementById('tk-member').value,
+        dueDate: document.getElementById('tk-due').value,
+        priority: document.getElementById('tk-prio').value,
+        done: taskId ? (state.tasks.find(x => x.id === taskId)?.done || false) : false
+      };
+      if (taskId) {
+        const idx = state.tasks.findIndex(x => x.id === taskId);
+        if (idx >= 0) state.tasks[idx] = data;
+      } else {
+        state.tasks.unshift(data);
+        if (state.push.notifyOnTask) {
+          const m = getMember(data.memberId);
+          sendPushNotification('Neue Familienaufgabe', `${data.title} (${m.short}, bis ${formatDateCH(data.dueDate)})`);
+        }
+      }
+      saveState();
+      closeModal();
+      renderApp();
+      showToast(taskId ? 'Aufgabe aktualisiert' : 'Aufgabe hinzugefügt', 'success');
+    }
+
+    function deleteTask(id) {
+      if (!canEdit()) return;
+      openConfirmModal('Aufgabe löschen', 'Soll diese Aufgabe wirklich entfernt werden?', () => {
+        state.tasks = state.tasks.filter(t => t.id !== id);
+        saveState();
+        renderApp();
+        showToast('Aufgabe gelöscht', 'info');
+      });
+    }
+
+    // =========================================================================
+    // 14. ANSICHT: SMARTE EINKAUFSLISTE & VERBRAUCHSAUTOMATIK
+    // =========================================================================
+    function renderShoppingView() {
+      const dueCount = state.shopping.consumption.filter(c => getConsumptionStatus(c).status === 'due').length;
+
+      let bodyHtml = '';
+      if (shoppingSubTab === 'list') {
+        const grouped = {};
+        SHOPPING_CATEGORIES.forEach(c => grouped[c] = []);
+        state.shopping.items.forEach(item => {
+          const cat = SHOPPING_CATEGORIES.includes(item.category) ? item.category : 'Sonstiges';
+          grouped[cat].push(item);
+        });
+
+        const checkedCount = state.shopping.items.filter(i => i.checked).length;
+
+        bodyHtml = `
+          ${canEdit() ? `
+            <form onsubmit="quickAddShoppingItem(event)" class="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row gap-2.5">
+              <input id="quick-shop-name" required placeholder="Artikel hinzufügen (z.B. Butter, Gurke...)" class="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <div class="flex gap-2">
+                <input id="quick-shop-qty" placeholder="Menge" class="w-24 sm:w-28 px-3 py-2.5 rounded-xl border border-slate-200 text-sm">
+                <select id="quick-shop-cat" class="flex-1 sm:w-40 px-3 py-2.5 rounded-xl border border-slate-200 text-sm bg-white">
+                  ${SHOPPING_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}
+                </select>
+                <button type="submit" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shrink-0 min-h-[44px]">
+                  <i data-lucide="plus" class="w-5 h-5"></i>
+                </button>
+              </div>
+            </form>
+          ` : ''}
+
+          <div class="space-y-4">
+            ${SHOPPING_CATEGORIES.map(cat => {
+              const list = grouped[cat];
+              if (list.length === 0) return '';
+              return `
+                <div class="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/80 shadow-sm">
+                  <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-3">${cat} (${list.filter(i => !i.checked).length})</h3>
+                  <div class="divide-y divide-slate-100">
+                    ${list.map(item => `
+                      <div class="py-2.5 flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
+                          ${canEdit() ? `
+                            <button onclick="toggleShoppingItem('${item.id}')" class="w-7 h-7 rounded-xl border-2 flex items-center justify-center shrink-0 transition ${item.checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 hover:border-indigo-500'}">
+                              ${item.checked ? '<i data-lucide="check" class="w-4 h-4"></i>' : ''}
+                            </button>
+                          ` : `
+                            <span class="w-2.5 h-2.5 rounded-full ${item.checked ? 'bg-emerald-400' : 'bg-indigo-400'}"></span>
+                          `}
+                          <div class="min-w-0">
+                            <p class="font-semibold text-sm ${item.checked ? 'line-through text-slate-400' : 'text-slate-900'}">
+                              ${esc(item.name)}
+                              ${item.consumptionId ? '<span class="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600">Auto</span>' : ''}
+                            </p>
+                            ${item.qty ? `<p class="text-xs text-slate-500">${esc(item.qty)}</p>` : ''}
+                          </div>
+                        </div>
+                        ${canEdit() ? `
+                          <button onclick="deleteShoppingItem('${item.id}')" class="p-2 rounded-xl text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        ` : ''}
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              `;
+            }).join('') || '<div class="bg-white rounded-3xl p-8 text-center text-slate-400 border border-slate-200/80">Die Einkaufsliste ist leer.</div>'}
+          </div>
+
+          ${canEdit() && checkedCount > 0 ? `
+            <div class="flex justify-end">
+              <button onclick="clearCheckedShopping()" class="px-4 py-2.5 rounded-xl bg-slate-200/80 hover:bg-slate-300/80 text-slate-700 text-xs font-bold transition min-h-[42px]">
+                Erledigte Artikel aufräumen (${checkedCount})
+              </button>
+            </div>
+          ` : ''}
+        `;
+      } else {
+        // Tab 2: Verbrauch & Automatik
+        const sortedCons = [...state.shopping.consumption].sort((a, b) => getConsumptionStatus(a).remaining - getConsumptionStatus(b).remaining);
+
+        bodyHtml = `
+          <div class="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h4 class="font-bold text-sm text-indigo-950">Intelligente Verbrauchsautomatik</h4>
+              <p class="text-xs text-indigo-800/80 mt-0.5">Berechnet anhand des letzten Kaufdatums & Intervalls, was bald ausgeht. Beim Abhaken auf der Einkaufsliste wird das Datum automatisch erneuert.</p>
+            </div>
+            ${canEdit() ? `
+              <div class="flex items-center gap-2 shrink-0">
+                <button onclick="syncDueConsumptionItems(false); renderApp();" class="px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition min-h-[42px]">
+                  Fällige auf Liste (${dueCount})
+                </button>
+                <button onclick="openConsumptionModal()" class="px-3.5 py-2.5 rounded-xl bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 text-xs font-bold transition min-h-[42px]">
+                  + Artikel
+                </button>
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            ${sortedCons.map(c => {
+              const st = getConsumptionStatus(c);
+              const badgeClass = st.status === 'due'
+                ? 'bg-rose-100 text-rose-700'
+                : st.status === 'soon'
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'bg-emerald-100 text-emerald-700';
+              const barClass = st.status === 'due'
+                ? 'bg-rose-500'
+                : st.status === 'soon'
+                  ? 'bg-amber-500'
+                  : 'bg-emerald-500';
+              const statusText = st.remaining <= 0
+                ? (st.remaining === 0 ? 'Heute fällig' : `Seit ${Math.abs(st.remaining)} T. fällig`)
+                : `Noch ${st.remaining} ${st.remaining === 1 ? 'Tag' : 'Tage'}`;
+
+              return `
+                <div class="bg-white rounded-2xl p-4 border ${st.status === 'due' ? 'border-rose-200' : 'border-slate-200/80'} shadow-sm space-y-3">
+                  <div class="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 class="font-bold text-slate-900">${esc(c.name)} <span class="text-xs font-normal text-slate-500">(${esc(c.qty)})</span></h4>
+                      <p class="text-xs text-slate-500 mt-0.5">${esc(c.category)} • Alle ${c.intervalDays} Tage • Zuletzt: ${formatDateCH(c.lastBought)}</p>
+                    </div>
+                    <span class="text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 ${badgeClass}">${statusText}</span>
+                  </div>
+
+                  <div class="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div class="h-full rounded-full transition-all ${barClass}" style="width: ${st.pct}%"></div>
+                  </div>
+
+                  ${canEdit() ? `
+                    <div class="flex items-center justify-between pt-1">
+                      <button onclick="markConsumptionBoughtToday('${c.id}')" class="text-xs font-semibold text-emerald-700 hover:underline">Heute gekauft ✓</button>
+                      <div class="flex items-center gap-1">
+                        <button onclick="openConsumptionModal('${c.id}')" class="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                        <button onclick="deleteConsumptionItem('${c.id}')" class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                      </div>
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="space-y-4">
+          <div class="inline-flex p-1 rounded-2xl bg-slate-200/70">
+            <button onclick="shoppingSubTab='list'; renderApp();" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition ${shoppingSubTab === 'list' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}">
+              Aktuelle Liste (${state.shopping.items.filter(i => !i.checked).length})
+            </button>
+            <button onclick="shoppingSubTab='consumption'; renderApp();" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${shoppingSubTab === 'consumption' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}">
+              Verbrauch & Automatik
+              ${dueCount > 0 ? `<span class="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px]">${dueCount}</span>` : ''}
+            </button>
+          </div>
+          ${bodyHtml}
+        </div>
+      `;
+    }
+
+    function quickAddShoppingItem(e) {
+      e.preventDefault();
+      if (!canEdit()) return;
+      const name = document.getElementById('quick-shop-name').value.trim();
+      const qty = document.getElementById('quick-shop-qty').value.trim();
+      const category = document.getElementById('quick-shop-cat').value;
+      if (!name) return;
+      state.shopping.items.unshift({
+        id: uid('s'),
+        name,
+        qty,
+        category,
+        checked: false,
+        consumptionId: null
+      });
+      saveState();
+      renderApp();
+      showToast(`${name} zur Einkaufsliste hinzugefügt`, 'success');
+    }
+
+    function toggleShoppingItem(id) {
+      if (!canEdit()) return;
+      const item = state.shopping.items.find(i => i.id === id);
+      if (!item) return;
+      item.checked = !item.checked;
+      // Wenn abgehakt und mit Verbrauchsartikel verknüpft -> Kaufdatum auf heute setzen!
+      if (item.checked && item.consumptionId) {
+        const cItem = state.shopping.consumption.find(c => c.id === item.consumptionId);
+        if (cItem) {
+          cItem.lastBought = todayISO();
+          showToast(`Verbrauchsdatum für "${cItem.name}" auf heute aktualisiert`, 'info');
+        }
+      }
+      saveState();
+      renderApp();
+    }
+
+    function deleteShoppingItem(id) {
+      if (!canEdit()) return;
+      state.shopping.items = state.shopping.items.filter(i => i.id !== id);
+      saveState();
+      renderApp();
+    }
+
+    function clearCheckedShopping() {
+      if (!canEdit()) return;
+      state.shopping.items = state.shopping.items.filter(i => !i.checked);
+      saveState();
+      renderApp();
+      showToast('Erledigte Artikel entfernt', 'info');
+    }
+
+    function markConsumptionBoughtToday(id) {
+      if (!canEdit()) return;
+      const c = state.shopping.consumption.find(x => x.id === id);
+      if (c) {
+        c.lastBought = todayISO();
+        saveState();
+        renderApp();
+        showToast(`${c.name}: Kaufdatum auf heute gesetzt`, 'success');
+      }
+    }
+
+    function openConsumptionModal(consId = null) {
+      if (!canEdit()) return;
+      const c = consId ? state.shopping.consumption.find(x => x.id === consId) : null;
+      openModal(c ? 'Verbrauchsartikel bearbeiten' : 'Neuer Verbrauchsartikel', `
+        <form onsubmit="saveConsumptionForm(event, '${c ? c.id : ''}')" class="space-y-3.5">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Artikelname *</label>
+            <input id="cs-name" required value="${esc(c?.name || '')}" placeholder="z.B. Vollmilch, Waschmittel" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Standard-Menge</label>
+              <input id="cs-qty" value="${esc(c?.qty || '1 Stk')}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Kategorie</label>
+              <select id="cs-cat" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white">
+                ${SHOPPING_CATEGORIES.map(cat => `<option value="${cat}" ${c?.category === cat ? 'selected' : ''}>${cat}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Verbrauchsintervall (Tage) *</label>
+              <input id="cs-interval" type="number" min="1" max="365" required value="${c?.intervalDays || 7}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Zuletzt gekauft *</label>
+              <input id="cs-last" type="date" required value="${esc(c?.lastBought || todayISO())}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm">Abbrechen</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm">Speichern</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveConsumptionForm(e, consId) {
+      e.preventDefault();
+      const data = {
+        id: consId || uid('c'),
+        name: document.getElementById('cs-name').value.trim(),
+        qty: document.getElementById('cs-qty').value.trim(),
+        category: document.getElementById('cs-cat').value,
+        intervalDays: Math.max(1, parseInt(document.getElementById('cs-interval').value, 10) || 7),
+        lastBought: document.getElementById('cs-last').value
+      };
+      if (consId) {
+        const idx = state.shopping.consumption.findIndex(x => x.id === consId);
+        if (idx >= 0) state.shopping.consumption[idx] = data;
+      } else {
+        state.shopping.consumption.push(data);
+      }
+      saveState();
+      closeModal();
+      renderApp();
+      showToast('Verbrauchsartikel gespeichert', 'success');
+    }
+
+    function deleteConsumptionItem(id) {
+      if (!canEdit()) return;
+      openConfirmModal('Artikel entfernen', 'Diesen wiederkehrenden Verbrauchsartikel löschen?', () => {
+        state.shopping.consumption = state.shopping.consumption.filter(c => c.id !== id);
+        saveState();
+        renderApp();
+      });
+    }
+
+    // =========================================================================
+    // 15. ANSICHT: ÄMTLIPLAN (HAUSHALTSAUFGABEN & STERNE)
+    // =========================================================================
+    function renderAemtliView() {
+      const kids = state.members.filter(m => m.roleType === 'child');
+
+      return `
+        <div class="space-y-5">
+          <!-- Sterne-Übersicht pro Kind -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            ${kids.map(k => `
+              <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex items-center justify-between">
+                <div class="flex items-center gap-3.5">
+                  <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl" style="background:${k.color}20">
+                    ${esc(k.avatar)}
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-slate-900">${esc(k.name)}</h3>
+                    <p class="text-xs text-slate-500">${state.aemtli.filter(a => a.memberId === k.id).length} Ämtli diese Woche</p>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="text-2xl font-extrabold text-amber-500">⭐ ${k.stars || 0}</div>
+                  <div class="text-[11px] font-semibold text-slate-400">Sterne</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Aktionen (nur Eltern & Admin) -->
+          ${canEdit() ? `
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap gap-2">
+                <button onclick="rotateAemtli()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-bold shadow-sm transition min-h-[44px]">
+                  <i data-lucide="refresh-cw" class="w-4 h-4"></i> Ämtli für nächste Woche rotieren
+                </button>
+                <button onclick="resetAemtliDone()" class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition min-h-[44px]">
+                  Status zurücksetzen
+                </button>
+              </div>
+              <button onclick="openAemtliModal()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition min-h-[44px]">
+                <i data-lucide="plus" class="w-4 h-4"></i> Neues Ämtli
+              </button>
+            </div>
+          ` : `
+            <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 font-medium flex items-center gap-2">
+              <i data-lucide="info" class="w-4 h-4 shrink-0"></i>
+              Wenn du dein Ämtli erledigt hast, sag es Mama oder Papa für deine Sterne! ⭐
+            </div>
+          `}
+
+          <!-- Ämtli-Tafel -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            ${state.aemtli.map(a => {
+              const m = getMember(a.memberId);
+              return `
+                <div class="bg-white rounded-2xl p-4 border-2 transition shadow-sm flex items-center justify-between gap-3 ${a.doneToday ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-100'}">
+                  <div class="flex items-center gap-3.5 min-w-0">
+                    ${canEdit() ? `
+                      <button onclick="toggleAemtli('${a.id}')" class="w-8 h-8 rounded-xl border-2 flex items-center justify-center shrink-0 transition ${a.doneToday ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 hover:border-indigo-500'}">
+                        ${a.doneToday ? '<i data-lucide="check" class="w-5 h-5"></i>' : ''}
+                      </button>
+                    ` : `
+                      <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-xl shrink-0">${esc(a.icon || '✨')}</div>
+                    `}
+                    <div class="min-w-0">
+                      <p class="font-bold text-slate-900 ${a.doneToday ? 'line-through text-slate-400' : ''}">
+                        ${canEdit() ? esc(a.icon || '✨') + ' ' : ''}${esc(a.title)}
+                      </p>
+                      <div class="flex items-center gap-2 mt-1 flex-wrap">
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full text-white" style="background:${m.color}">${esc(m.avatar)} ${esc(m.short)}</span>
+                        <span class="text-xs text-slate-500">${esc(a.frequency)}</span>
+                        <span class="text-xs font-bold text-amber-600">+${a.stars} ⭐</span>
+                      </div>
+                    </div>
+                  </div>
+                  ${canEdit() ? `
+                    <div class="flex items-center gap-1 shrink-0">
+                      <button onclick="openAemtliModal('${a.id}')" class="p-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                      <button onclick="deleteAemtli('${a.id}')" class="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                  ` : `
+                    <span class="text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${a.doneToday ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
+                      ${a.doneToday ? 'Erledigt ✓' : 'Offen'}
+                    </span>
+                  `}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleAemtli(id) {
+      if (!canEdit()) return;
+      const a = state.aemtli.find(x => x.id === id);
+      if (!a) return;
+      a.doneToday = !a.doneToday;
+      const member = state.members.find(m => m.id === a.memberId);
+      if (member) {
+        member.stars = Math.max(0, (member.stars || 0) + (a.doneToday ? a.stars : -a.stars));
+      }
+      saveState();
+      renderApp();
+      if (a.doneToday && member) {
+        showToast(`${member.short} erhält +${a.stars} Sterne! ⭐`, 'success');
+      }
+    }
+
+    function rotateAemtli() {
+      if (!canEdit()) return;
+      const kids = state.members.filter(m => m.roleType === 'child');
+      if (kids.length < 2) {
+        showToast('Für eine Rotation braucht es mindestens 2 Kinder.', 'warning');
+        return;
+      }
+      state.aemtli.forEach(a => {
+        const idx = kids.findIndex(k => k.id === a.memberId);
+        if (idx >= 0) {
+          a.memberId = kids[(idx + 1) % kids.length].id;
+        }
+        a.doneToday = false;
+      });
+      saveState();
+      renderApp();
+      showToast('Ämtli erfolgreich für die nächste Woche rotiert!', 'success');
+    }
+
+    function resetAemtliDone() {
+      if (!canEdit()) return;
+      state.aemtli.forEach(a => a.doneToday = false);
+      saveState();
+      renderApp();
+      showToast('Alle Ämtli wieder auf offen gesetzt', 'info');
+    }
+
+    function openAemtliModal(aemtliId = null) {
+      if (!canEdit()) return;
+      const a = aemtliId ? state.aemtli.find(x => x.id === aemtliId) : null;
+      openModal(a ? 'Ämtli bearbeiten' : 'Neues Ämtli', `
+        <form onsubmit="saveAemtliForm(event, '${a ? a.id : ''}')" class="space-y-3.5">
+          <div class="grid grid-cols-4 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Icon</label>
+              <input id="ae-icon" value="${esc(a?.icon || '✨')}" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-center text-lg">
+            </div>
+            <div class="col-span-3">
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Ämtli-Titel *</label>
+              <input id="ae-title" required value="${esc(a?.title || '')}" placeholder="z.B. Tisch decken" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Zuständig</label>
+              <select id="ae-member" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white">
+                ${state.members.map(m => `<option value="${m.id}" ${a && a.memberId === m.id ? 'selected' : ''}>${esc(m.avatar)} ${esc(m.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Rhythmus</label>
+              <input id="ae-freq" value="${esc(a?.frequency || 'Täglich')}" placeholder="z.B. Täglich, Samstag" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Belohnung (Sterne)</label>
+            <input id="ae-stars" type="number" min="1" max="10" value="${a?.stars || 2}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm">Abbrechen</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm">Speichern</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveAemtliForm(e, aemtliId) {
+      e.preventDefault();
+      const data = {
+        id: aemtliId || uid('a'),
+        icon: document.getElementById('ae-icon').value.trim() || '✨',
+        title: document.getElementById('ae-title').value.trim(),
+        memberId: document.getElementById('ae-member').value,
+        frequency: document.getElementById('ae-freq').value.trim(),
+        stars: parseInt(document.getElementById('ae-stars').value, 10) || 1,
+        doneToday: aemtliId ? (state.aemtli.find(x => x.id === aemtliId)?.doneToday || false) : false
+      };
+      if (aemtliId) {
+        const idx = state.aemtli.findIndex(x => x.id === aemtliId);
+        if (idx >= 0) state.aemtli[idx] = data;
+      } else {
+        state.aemtli.push(data);
+      }
+      saveState();
+      closeModal();
+      renderApp();
+      showToast('Ämtli gespeichert', 'success');
+    }
+
+    function deleteAemtli(id) {
+      if (!canEdit()) return;
+      openConfirmModal('Ämtli löschen', 'Dieses Ämtli wirklich aus dem Plan entfernen?', () => {
+        state.aemtli = state.aemtli.filter(a => a.id !== id);
+        saveState();
+        renderApp();
+      });
+    }
+
+    // =========================================================================
+    // 16. ANSICHT: ALLTAGSHELFER (Menüplan, Pinnwand, Countdowns, Notfall)
+    // =========================================================================
+    function renderHelpersView() {
+      const today = todayISO();
+      const noteBg = {
+        amber: 'bg-amber-50 border-amber-200 text-amber-950',
+        sky: 'bg-sky-50 border-sky-200 text-sky-950',
+        rose: 'bg-rose-50 border-rose-200 text-rose-950',
+        emerald: 'bg-emerald-50 border-emerald-200 text-emerald-950'
+      };
+
+      return `
+        <div class="space-y-6">
+          <!-- 1. Wochenmenü-Planer -->
+          <section class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center"><i data-lucide="utensils" class="w-5 h-5"></i></div>
+                <h3 class="font-bold text-slate-900">Wochenmenü-Planer</h3>
+              </div>
+              ${canEdit() ? `<span class="text-xs text-slate-400">Tippen zum Bearbeiten</span>` : ''}
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              ${state.helpers.menu.map((m, idx) => {
+                const isToday = ((new Date().getDay() + 6) % 7) === idx;
+                return `
+                  <div ${canEdit() ? `onclick="openMenuModal(${idx})"` : ''} class="p-3.5 rounded-2xl border transition ${isToday ? 'bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-200' : 'bg-slate-50/70 border-slate-200/70'} ${canEdit() ? 'cursor-pointer hover:border-indigo-300' : ''}">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="font-bold text-xs uppercase tracking-wider ${isToday ? 'text-emerald-700' : 'text-slate-500'}">${esc(m.day)}</span>
+                      ${isToday ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">Heute</span>' : ''}
+                    </div>
+                    <div class="space-y-1.5 text-xs">
+                      <div><span class="font-bold text-slate-400">☀️</span> <span class="text-slate-800 font-medium">${esc(m.lunch)}</span></div>
+                      <div><span class="font-bold text-slate-400">🌙</span> <span class="text-slate-600">${esc(m.dinner)}</span></div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </section>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 2. Familien-Pinnwand -->
+            <section class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm space-y-4">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center"><i data-lucide="pin" class="w-5 h-5"></i></div>
+                  <h3 class="font-bold text-slate-900">Familien-Pinnwand</h3>
+                </div>
+                ${canEdit() ? `<button onclick="openNoteModal()" class="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold">+ Notiz</button>` : ''}
+              </div>
+              <div class="space-y-2.5">
+                ${state.helpers.notes.map(n => `
+                  <div class="p-3.5 rounded-2xl border flex items-start justify-between gap-2 ${noteBg[n.color] || noteBg.amber}">
+                    <div>
+                      <p class="text-sm font-medium">${esc(n.text)}</p>
+                      <p class="text-[11px] opacity-70 mt-1">— ${esc(n.author)} • ${formatDateCH(n.date)}</p>
+                    </div>
+                    ${canEdit() ? `<button onclick="deleteNote('${n.id}')" class="p-1.5 rounded-lg hover:bg-black/5 opacity-60 hover:opacity-100"><i data-lucide="x" class="w-4 h-4"></i></button>` : ''}
+                  </div>
+                `).join('') || '<p class="text-sm text-slate-400">Noch keine Notizen angepinnt.</p>'}
+              </div>
+            </section>
+
+            <!-- 3. Countdown-Tracker -->
+            <section class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm space-y-4">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center"><i data-lucide="hourglass" class="w-5 h-5"></i></div>
+                  <h3 class="font-bold text-slate-900">Countdown-Tracker</h3>
+                </div>
+                ${canEdit() ? `<button onclick="openCountdownModal()" class="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold">+ Countdown</button>` : ''}
+              </div>
+              <div class="space-y-2.5">
+                ${state.helpers.countdowns.map(cd => {
+                  const days = daysBetween(today, cd.date);
+                  return `
+                    <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-center justify-between gap-3">
+                      <div class="flex items-center gap-3">
+                        <span class="text-2xl">${esc(cd.emoji)}</span>
+                        <div>
+                          <p class="font-bold text-sm text-slate-900">${esc(cd.title)}</p>
+                          <p class="text-xs text-slate-500">${formatDateCH(cd.date)}</p>
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="px-3 py-1 rounded-full text-xs font-extrabold ${days < 0 ? 'bg-slate-200 text-slate-500' : 'bg-indigo-100 text-indigo-700'}">
+                          ${days < 0 ? 'Vorbei' : days === 0 ? 'Heute! 🎉' : `in ${days} T.`}
+                        </span>
+                        ${canEdit() ? `<button onclick="deleteCountdown('${cd.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </section>
+          </div>
+
+          <!-- 4. Wichtige Kontakte & Schweizer Notfallnummern -->
+          <section class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center"><i data-lucide="phone-call" class="w-5 h-5"></i></div>
+                <h3 class="font-bold text-slate-900">Wichtige Kontakte & Notfallnummern (CH)</h3>
+              </div>
+              ${canEdit() ? `<button onclick="openContactModal()" class="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold">+ Kontakt</button>` : ''}
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              ${state.helpers.contacts.map(ct => `
+                <div class="p-3.5 rounded-2xl border flex items-center justify-between gap-2 ${ct.urgent ? 'bg-rose-50/70 border-rose-200' : 'bg-slate-50 border-slate-200/70'}">
+                  <div class="min-w-0">
+                    <span class="text-[10px] font-bold uppercase tracking-wider ${ct.urgent ? 'text-rose-600' : 'text-slate-400'}">${esc(ct.category)}</span>
+                    <p class="font-bold text-sm text-slate-900 truncate">${esc(ct.name)}</p>
+                    <a href="tel:${esc(ct.phone.replace(/\s+/g, ''))}" class="inline-flex items-center gap-1 text-sm font-extrabold ${ct.urgent ? 'text-rose-700' : 'text-indigo-600'} hover:underline mt-0.5">
+                      <i data-lucide="phone" class="w-3.5 h-3.5"></i> ${esc(ct.phone)}
+                    </a>
+                  </div>
+                  ${canEdit() && !ct.urgent ? `<button onclick="deleteContact('${ct.id}')" class="p-2 rounded-lg text-slate-400 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </section>
+        </div>
+      `;
+    }
+
+    function openMenuModal(idx) {
+      if (!canEdit()) return;
+      const m = state.helpers.menu[idx];
+      openModal(`Menü für ${m.day}`, `
+        <form onsubmit="saveMenuForm(event, ${idx})" class="space-y-3.5">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">☀️ Mittagessen (Zmittag)</label>
+            <input id="mn-lunch" value="${esc(m.lunch)}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">🌙 Abendessen (Znacht)</label>
+            <input id="mn-dinner" value="${esc(m.dinner)}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm">Abbrechen</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Speichern</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveMenuForm(e, idx) {
+      e.preventDefault();
+      state.helpers.menu[idx].lunch = document.getElementById('mn-lunch').value.trim();
+      state.helpers.menu[idx].dinner = document.getElementById('mn-dinner').value.trim();
+      saveState();
+      closeModal();
+      renderApp();
+      showToast('Wochenmenü aktualisiert', 'success');
+    }
+
+    function openNoteModal() {
+      if (!canEdit()) return;
+      openModal('Neue Pinnwand-Notiz', `
+        <form onsubmit="saveNoteForm(event)" class="space-y-3.5">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Nachricht *</label>
+            <textarea id="nt-text" required rows="3" placeholder="Kurze Erinnerung für die Familie..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm"></textarea>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Von</label>
+              <input id="nt-author" value="${currentRole === 'admin' ? 'Admin' : 'Eltern'}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Farbe</label>
+              <select id="nt-color" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white">
+                <option value="amber">Gelb</option>
+                <option value="sky">Blau</option>
+                <option value="rose">Rosa</option>
+                <option value="emerald">Grün</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm">Abbrechen</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Anpinnen</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveNoteForm(e) {
+      e.preventDefault();
+      state.helpers.notes.unshift({
+        id: uid('n'),
+        text: document.getElementById('nt-text').value.trim(),
+        author: document.getElementById('nt-author').value.trim() || 'Familie',
+        color: document.getElementById('nt-color').value,
+        date: todayISO()
+      });
+      saveState();
+      closeModal();
+      renderApp();
+    }
+
+    function deleteNote(id) {
+      if (!canEdit()) return;
+      state.helpers.notes = state.helpers.notes.filter(n => n.id !== id);
+      saveState();
+      renderApp();
+    }
+
+    function openCountdownModal() {
+      if (!canEdit()) return;
+      openModal('Neuer Countdown', `
+        <form onsubmit="saveCountdownForm(event)" class="space-y-3.5">
+          <div class="grid grid-cols-4 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Emoji</label>
+              <input id="cd-emoji" value="🎉" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-center text-lg">
+            </div>
+            <div class="col-span-3">
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Ereignis *</label>
+              <input id="cd-title" required placeholder="z.B. Sommerferien" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Datum *</label>
+            <input id="cd-date" type="date" required value="${getDateOffset(14)}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm">Abbrechen</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Hinzufügen</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveCountdownForm(e) {
+      e.preventDefault();
+      state.helpers.countdowns.push({
+        id: uid('cd'),
+        emoji: document.getElementById('cd-emoji').value.trim() || '🎉',
+        title: document.getElementById('cd-title').value.trim(),
+        date: document.getElementById('cd-date').value
+      });
+      saveState();
+      closeModal();
+      renderApp();
+    }
+
+    function deleteCountdown(id) {
+      if (!canEdit()) return;
+      state.helpers.countdowns = state.helpers.countdowns.filter(c => c.id !== id);
+      saveState();
+      renderApp();
+    }
+
+    function openContactModal() {
+      if (!canEdit()) return;
+      openModal('Neuer Kontakt', `
+        <form onsubmit="saveContactForm(event)" class="space-y-3.5">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Name *</label>
+            <input id="ct-name" required placeholder="z.B. Zahnarzt, Nachbarin" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Telefonnummer *</label>
+              <input id="ct-phone" required placeholder="079 000 00 00" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Kategorie</label>
+              <input id="ct-cat" value="Familie" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm">Abbrechen</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Speichern</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveContactForm(e) {
+      e.preventDefault();
+      state.helpers.contacts.push({
+        id: uid('ct'),
+        name: document.getElementById('ct-name').value.trim(),
+        phone: document.getElementById('ct-phone').value.trim(),
+        category: document.getElementById('ct-cat').value.trim() || 'Sonstiges',
+        urgent: false
+      });
+      saveState();
+      closeModal();
+      renderApp();
+    }
+
+    function deleteContact(id) {
+      if (!canEdit()) return;
+      state.helpers.contacts = state.helpers.contacts.filter(c => c.id !== id);
+      saveState();
+      renderApp();
+    }
+
+    // =========================================================================
+    // 17. ANSICHT: CLOUD, PUSH & ADMIN (Nur Admin)
+    // =========================================================================
+    function renderAdminView() {
+      if (!isAdmin()) return '<p class="text-slate-500">Nur für Administratoren zugänglich.</p>';
+
+      const notifPerm = ('Notification' in window) ? Notification.permission : 'unsupported';
+
+      return `
+        <div class="space-y-6">
+          <!-- 1. OneDrive Cloud & Backup -->
+          <section class="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-sm space-y-4">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center"><i data-lucide="cloud" class="w-5 h-5"></i></div>
+                <div>
+                  <h3 class="font-bold text-slate-900">OneDrive-Speicherung & Synchronisation</h3>
+                  <p class="text-xs text-slate-500">Automatische Browser-Speicherung + Microsoft OneDrive Sync & JSON-Backup</p>
+                </div>
+              </div>
+              ${state.sync.lastSync ? `<span class="text-xs font-semibold text-sky-700 bg-sky-50 px-3 py-1 rounded-full">Letzter Sync: ${esc(state.sync.lastSync)}</span>` : ''}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Microsoft Entra ID Client-ID (optional für Direkt-Sync)</label>
+                <input id="adm-od-client" value="${esc(state.sync.oneDriveClientId)}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">OneDrive-Dateipfad</label>
+                <input id="adm-od-path" value="${esc(state.sync.oneDrivePath)}" placeholder="/FamilienHub/daten.json" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono">
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <label class="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                <input type="checkbox" id="adm-od-auto" ${state.sync.autoSync ? 'checked' : ''} class="w-4 h-4 accent-indigo-600 rounded">
+                Bei Änderungen automatisch auf OneDrive speichern
+              </label>
+              <button onclick="saveSyncSettings()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition min-h-[40px]">Einstellungen sichern</button>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex flex-wrap gap-2.5">
+              <button onclick="syncToOneDrive(false)" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold transition min-h-[42px]">
+                <i data-lucide="cloud-upload" class="w-4 h-4"></i> Auf OneDrive speichern
+              </button>
+              <button onclick="loadFromOneDrive()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-bold transition min-h-[42px]">
+                <i data-lucide="cloud-download" class="w-4 h-4"></i> Von OneDrive laden
+              </button>
+              <button onclick="exportJsonBackup()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition min-h-[42px]">
+                <i data-lucide="download" class="w-4 h-4"></i> 1-Klick JSON-Export (OneDrive Ordner)
+              </button>
+              <button onclick="triggerJsonImport()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition min-h-[42px]">
+                <i data-lucide="upload" class="w-4 h-4"></i> JSON-Import
+              </button>
+            </div>
+          </section>
+
+          <!-- 2. Push-Benachrichtigungen -->
+          <section class="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-sm space-y-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center"><i data-lucide="bell-ring" class="w-5 h-5"></i></div>
+              <div>
+                <h3 class="font-bold text-slate-900">Automatische Push-Benachrichtigungen aufs Handy</h3>
+                <p class="text-xs text-slate-500">Nutze Browser-Push oder ein privates ntfy.sh Topic (kostenlose iOS/Android App)</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-bold text-slate-800">Browser-Benachrichtigungen</span>
+                  <span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${notifPerm === 'granted' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}">${notifPerm}</span>
+                </div>
+                <button onclick="requestBrowserPushPermission()" class="w-full py-2.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 text-xs font-bold transition min-h-[42px]">
+                  Berechtigung anfragen / aktivieren
+                </button>
+              </div>
+
+              <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-2.5">
+                <label class="block text-sm font-bold text-slate-800">ntfy.sh Topic (Handy-Push Webhook)</label>
+                <input id="adm-ntfy-topic" value="${esc(state.push.ntfyTopic)}" placeholder="z.B. familienhub-meier-geheim99" class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm bg-white">
+                <p class="text-[11px] text-slate-500">Dieses Topic in der <strong>ntfy</strong> App auf dem Handy abonnieren für sofortige Pushs.</p>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-700">
+              <label class="inline-flex items-center gap-2"><input type="checkbox" id="adm-push-task" ${state.push.notifyOnTask ? 'checked' : ''} class="w-4 h-4 accent-indigo-600"> Bei neuen Aufgaben</label>
+              <label class="inline-flex items-center gap-2"><input type="checkbox" id="adm-push-shop" ${state.push.notifyOnShopping ? 'checked' : ''} class="w-4 h-4 accent-indigo-600"> Bei fälligen Einkäufen</label>
+              <label class="inline-flex items-center gap-2"><input type="checkbox" id="adm-push-ev" ${state.push.notifyOnEvent ? 'checked' : ''} class="w-4 h-4 accent-indigo-600"> Bei neuen Terminen</label>
+            </div>
+
+            <div class="flex flex-wrap gap-2 pt-1">
+              <button onclick="savePushSettings()" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition min-h-[42px]">Push-Einstellungen speichern</button>
+              <button onclick="savePushSettings(true); sendPushNotification('Test-Push FamilienHub', 'Hallo! Deine Push-Nachrichten funktionieren einwandfrei.', true);" class="px-4 py-2.5 rounded-xl bg-violet-100 hover:bg-violet-200 text-violet-800 text-xs font-bold transition min-h-[42px]">Test-Push senden</button>
+            </div>
+          </section>
+
+          <!-- 3. Google Kalender Integration -->
+          <section class="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-sm space-y-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center"><i data-lucide="calendar-sync" class="w-5 h-5"></i></div>
+              <div>
+                <h3 class="font-bold text-slate-900">Google-Kalender-Synchronisation</h3>
+                <p class="text-xs text-slate-500">Embed-URL aus den Google-Kalender-Einstellungen ("Kalender integrieren") einfügen</p>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Google Kalender Embed-URL (iframe src)</label>
+                <input id="adm-gcal-embed" value="${esc(state.calendar.googleEmbedUrl)}" placeholder="https://calendar.google.com/calendar/embed?src=..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Privatadresse im iCal-Format (.ics, optional)</label>
+                <input id="adm-gcal-ics" value="${esc(state.calendar.googleIcsUrl)}" placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+              </div>
+            </div>
+            <button onclick="saveGoogleCalSettings()" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition min-h-[42px]">Google Kalender speichern</button>
+          </section>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 4. Familienmitglieder verwalten -->
+            <section class="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-sm space-y-4">
+              <div class="flex items-center justify-between">
+                <h3 class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-indigo-600"></i> Familienmitglieder</h3>
+                <button onclick="openMemberModal()" class="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold">+ Mitglied</button>
+              </div>
+              <div class="space-y-2">
+                ${state.members.map(m => `
+                  <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                      <span class="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style="background:${m.color}25">${esc(m.avatar)}</span>
+                      <div>
+                        <p class="font-bold text-sm text-slate-900">${esc(m.name)}</p>
+                        <p class="text-xs text-slate-500">${m.roleType === 'parent' ? 'Elternteil' : 'Kind'}</p>
+                      </div>
+                    </div>
+                    <button onclick="deleteMember('${m.id}')" class="p-2 rounded-lg text-slate-400 hover:text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                  </div>
+                `).join('')}
+              </div>
+            </section>
+
+            <!-- 5. Sicherheit, PINs & Familienname -->
+            <section class="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-sm space-y-4">
+              <h3 class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="lock" class="w-5 h-5 text-indigo-600"></i> PIN-Schutz & Allgemein</h3>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-1">Familienname</label>
+                  <input id="adm-fam-name" value="${esc(state.familyName)}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Admin-PIN (4 Ziffern)</label>
+                    <input id="adm-pin-admin" maxlength="4" pattern="\\d{4}" value="${esc(state.pins.admin)}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono tracking-widest">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Eltern-PIN (4 Ziffern)</label>
+                    <input id="adm-pin-parent" maxlength="4" pattern="\\d{4}" value="${esc(state.pins.parent)}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono tracking-widest">
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-2">
+                  <button onclick="saveSecuritySettings()" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition min-h-[42px]">Speichern</button>
+                  <button onclick="resetAllData()" class="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition min-h-[42px]">Beispieldaten zurücksetzen</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      `;
+    }
+
+    function saveSyncSettings() {
+      state.sync.oneDriveClientId = document.getElementById('adm-od-client').value.trim();
+      state.sync.oneDrivePath = document.getElementById('adm-od-path').value.trim() || '/FamilienHub/daten.json';
+      state.sync.autoSync = document.getElementById('adm-od-auto').checked;
+      saveState(false);
+      showToast('OneDrive-Einstellungen gespeichert', 'success');
+    }
+
+    function savePushSettings(silent = false) {
+      state.push.ntfyTopic = document.getElementById('adm-ntfy-topic').value.trim();
+      state.push.notifyOnTask = document.getElementById('adm-push-task').checked;
+      state.push.notifyOnShopping = document.getElementById('adm-push-shop').checked;
+      state.push.notifyOnEvent = document.getElementById('adm-push-ev').checked;
+      saveState();
+      if (!silent) showToast('Push-Einstellungen gespeichert', 'success');
+    }
+
+    function saveGoogleCalSettings() {
+      state.calendar.googleEmbedUrl = document.getElementById('adm-gcal-embed').value.trim();
+      state.calendar.googleIcsUrl = document.getElementById('adm-gcal-ics').value.trim();
+      saveState();
+      showToast('Google-Kalender-URLs gespeichert', 'success');
+    }
+
+    function saveSecuritySettings() {
+      const aPin = document.getElementById('adm-pin-admin').value.trim();
+      const pPin = document.getElementById('adm-pin-parent').value.trim();
+      if (!/^\d{4}$/.test(aPin) || !/^\d{4}$/.test(pPin)) {
+        showToast('PINs müssen genau 4 Ziffern enthalten.', 'error');
+        return;
+      }
+      state.familyName = document.getElementById('adm-fam-name').value.trim() || 'Unsere Familie';
+      state.pins.admin = aPin;
+      state.pins.parent = pPin;
+      saveState();
+      renderApp();
+      showToast('Sicherheit & Familienname gespeichert', 'success');
+    }
+
+    function openMemberModal() {
+      openModal('Neues Familienmitglied', `
+        <form onsubmit="saveMemberForm(event)" class="space-y-3.5">
+          <div class="grid grid-cols-4 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Avatar</label>
+              <input id="mb-avatar" value="🧒" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-center text-lg">
+            </div>
+            <div class="col-span-3">
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Name *</label>
+              <input id="mb-name" required placeholder="z.B. Lena" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Typ</label>
+              <select id="mb-type" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white">
+                <option value="child">Kind</option>
+                <option value="parent">Elternteil</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Farbe</label>
+              <input id="mb-color" type="color" value="#f59e0b" class="w-full h-[42px] px-1 py-1 rounded-xl border border-slate-200 bg-white">
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm">Abbrechen</button>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Hinzufügen</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveMemberForm(e) {
+      e.preventDefault();
+      const name = document.getElementById('mb-name').value.trim();
+      state.members.push({
+        id: uid('m'),
+        name,
+        short: name.split(' ')[0],
+        roleType: document.getElementById('mb-type').value,
+        color: document.getElementById('mb-color').value,
+        avatar: document.getElementById('mb-avatar').value.trim() || '👤',
+        stars: 0
+      });
+      saveState();
+      closeModal();
+      renderApp();
+      showToast(`${name} hinzugefügt`, 'success');
+    }
+
+    function deleteMember(id) {
+      if (state.members.length <= 1) {
+        showToast('Mindestens ein Familienmitglied muss bestehen bleiben.', 'warning');
+        return;
+      }
+      openConfirmModal('Mitglied entfernen', 'Dieses Familienmitglied wirklich entfernen?', () => {
+        state.members = state.members.filter(m => m.id !== id);
+        saveState();
+        renderApp();
+      });
+    }
+
+    function resetAllData() {
+      openConfirmModal('Alles zurücksetzen', 'Alle eigenen Änderungen werden gelöscht und die Beispieldaten wiederhergestellt.', () => {
+        state = structuredClone(DEFAULT_STATE);
+        saveState(false);
+        renderApp();
+        showToast('Beispieldaten wiederhergestellt', 'info');
+      });
+    }
+
+    // =========================================================================
+    // 18. INITIALISIERUNG BEIM START
+    // =========================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+      // Automatische Prüfung fälliger Verbrauchsartikel beim Start
+      const autoAdded = syncDueConsumptionItems(true);
+      renderApp();
+      checkSleepMode();
+      if (autoAdded > 0 && canEdit()) {
+        showToast(`${autoAdded} fällige(r) Verbrauchsartikel automatisch auf die Einkaufsliste gesetzt.`, 'info');
+      }
+      // Uhr & Schlafmodus alle 15 Sekunden aktualisieren
+      setInterval(checkSleepMode, 15000);
+    });
+  </script>
+</body>
+</html>
